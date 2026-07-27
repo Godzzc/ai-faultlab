@@ -1,0 +1,154 @@
+# =========================
+# Java / Maven / Gradle
+# =========================
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.log
+hs_err_pid*
+replay_pid*
+
+.mvn/wrapper/maven-wrapper.jar
+.gradle/
+build/
+out/
+
+# =========================
+# Spring Boot Config
+# =========================
+application-local.yml
+application-dev.yml
+application-prod.yml
+application-secret.yml
+bootstrap-local.yml
+bootstrap-dev.yml
+bootstrap-prod.yml
+bootstrap-secret.yml
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# =========================
+# Node / Frontend
+# =========================
+node_modules/
+dist/
+dist-ssr/
+.vite/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# =========================
+# IDE
+# =========================
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.project
+.classpath
+.settings/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+log/
+*.out
+
+# =========================
+# Uploads / Runtime Files
+# =========================
+uploads/
+tmp/
+temp/
+runtime/
+data/
+
+# =========================
+# Docker Runtime Data
+# =========================
+deploy/mysql/data/
+deploy/redis/data/
+deploy/rabbitmq/data/
+deploy/nginx/logs/
+
+# =========================
+# Database Dumps
+# =========================
+*.sql.gz
+*.dump
+*.bak
+
+# =========================
+# Secrets / Keys
+# =========================
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+id_rsa
+id_rsa.pub
+secrets/
+secret/
+credentials/
+
+# =========================
+# AI / LLM Keys
+# =========================
+openai.key
+llm.key
+api-key.txt
+
+# =========================
+# Misc
+# =========================
+*.swp
+*.swo
+*.tmp
+*.bak
