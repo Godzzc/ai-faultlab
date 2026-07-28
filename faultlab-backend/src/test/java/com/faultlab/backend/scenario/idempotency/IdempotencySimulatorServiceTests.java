@@ -22,7 +22,8 @@ class IdempotencySimulatorServiceTests {
     @SuppressWarnings("unchecked")
     private final ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
     private final MetricService metricService = mock(MetricService.class);
-    private final IdempotencySimulatorService simulatorService = new IdempotencySimulatorService(stringRedisTemplate, metricService);
+    private final IdempotencyCheckService idempotencyCheckService = new IdempotencyCheckService(stringRedisTemplate);
+    private final IdempotencySimulatorService simulatorService = new IdempotencySimulatorService(idempotencyCheckService, metricService);
 
     @BeforeEach
     void setUp() {

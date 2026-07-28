@@ -3,6 +3,8 @@ package com.faultlab.backend.scenario.impl;
 import com.faultlab.backend.metric.service.MetricService;
 import com.faultlab.backend.scenario.idempotency.IdempotencySimulatedRequest;
 import com.faultlab.backend.scenario.idempotency.IdempotencySimulatorService;
+import com.faultlab.backend.trace.context.TraceContext;
+import com.faultlab.backend.trace.context.TraceContextHolder;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -10,6 +12,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +36,7 @@ class IdempotencyConflictScenarioTests {
             executor.shutdownNow();
             executor.awaitTermination(1, TimeUnit.SECONDS);
         }
+        TraceContextHolder.clear();
     }
 
     @Test
@@ -100,6 +104,28 @@ class IdempotencyConflictScenarioTests {
 
         verify(metricService).recordMetric("exp-1", "requestCount", 3, "count", "Idempotency");
         verify(metricService).recordMetric("exp-1", "redisErrorCount", 3, "count", "Idempotency");
+    }
+
+    @Test
+    void shouldPropagateTraceContextToIdempotencySimulationTask() throws InterruptedException {
+        executor = executor(1, 10);
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<TraceContext> contextInWorker = new AtomicReference<>();
+        doAnswer(invocation -> {
+            contextInWorker.set(TraceContextHolder.get());
+            latch.countDown();
+            return null;
+        }).when(idempotencySimulatorService).simulate(eq("exp-1"), any(), eq(1000L));
+        TraceContextHolder.set(new TraceContext("trace-1", "parent-span", "exp-1"));
+        IdempotencyConflictScenario scenario = scenario();
+
+        scenario.execute("exp-1", Map.of("requestCount", 1));
+
+        assertThat(latch.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(contextInWorker.get()).isNotNull();
+        assertThat(contextInWorker.get().getTraceId()).isEqualTo("trace-1");
+        assertThat(contextInWorker.get().getSpanId()).isEqualTo("parent-span");
+        assertThat(contextInWorker.get().getExperimentId()).isEqualTo("exp-1");
     }
 
     private IdempotencyConflictScenario scenario() {

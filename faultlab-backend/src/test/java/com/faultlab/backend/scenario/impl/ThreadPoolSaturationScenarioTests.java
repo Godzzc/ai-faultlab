@@ -1,10 +1,14 @@
 package com.faultlab.backend.scenario.impl;
 
 import com.faultlab.backend.metric.service.MetricService;
+import com.faultlab.backend.trace.context.TraceContext;
+import com.faultlab.backend.trace.context.TraceContextHolder;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +31,7 @@ class ThreadPoolSaturationScenarioTests {
             executor.shutdownNow();
             executor.awaitTermination(1, TimeUnit.SECONDS);
         }
+        TraceContextHolder.clear();
     }
 
     @Test
@@ -75,6 +80,52 @@ class ThreadPoolSaturationScenarioTests {
         verify(metricService).recordMetric(eq("exp-1"), eq("activeThreadCount"), any(Number.class), eq("count"), eq("ThreadPool"));
         verify(metricService).recordMetric(eq("exp-1"), eq("queueSize"), any(Number.class), eq("count"), eq("ThreadPool"));
         verify(metricService).recordMetric("exp-1", "avgTaskDurationMs", 1000L, "ms", "ThreadPool");
+    }
+
+    @Test
+    void shouldPropagateTraceContextToThreadPoolTask() throws InterruptedException {
+        executor = executor(1, 1);
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<TraceContext> contextInWorker = new AtomicReference<>();
+        doAnswer(invocation -> {
+            contextInWorker.set(TraceContextHolder.get());
+            latch.countDown();
+            return null;
+        }).when(threadPoolTaskRunner).runBlockingTask(0L);
+        TraceContextHolder.set(new TraceContext("trace-1", "parent-span", "exp-1"));
+        ThreadPoolSaturationScenario scenario = scenario();
+
+        scenario.execute("exp-1", Map.of("taskCount", 1, "taskSleepMs", 0));
+
+        assertThat(latch.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(contextInWorker.get()).isNotNull();
+        assertThat(contextInWorker.get().getTraceId()).isEqualTo("trace-1");
+        assertThat(contextInWorker.get().getSpanId()).isEqualTo("parent-span");
+        assertThat(contextInWorker.get().getExperimentId()).isEqualTo("exp-1");
+    }
+
+    @Test
+    void shouldClearTraceContextAfterThreadPoolTask() throws InterruptedException {
+        executor = executor(1, 1);
+        CountDownLatch taskFinished = new CountDownLatch(1);
+        CountDownLatch contextChecked = new CountDownLatch(1);
+        AtomicReference<TraceContext> contextAfterTask = new AtomicReference<>();
+        doAnswer(invocation -> {
+            taskFinished.countDown();
+            return null;
+        }).when(threadPoolTaskRunner).runBlockingTask(0L);
+        TraceContextHolder.set(new TraceContext("trace-1", "parent-span", "exp-1"));
+        ThreadPoolSaturationScenario scenario = scenario();
+
+        scenario.execute("exp-1", Map.of("taskCount", 1, "taskSleepMs", 0));
+        assertThat(taskFinished.await(1, TimeUnit.SECONDS)).isTrue();
+        executor.execute(() -> {
+            contextAfterTask.set(TraceContextHolder.get());
+            contextChecked.countDown();
+        });
+
+        assertThat(contextChecked.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(contextAfterTask.get()).isNull();
     }
 
     private ThreadPoolSaturationScenario scenario() {

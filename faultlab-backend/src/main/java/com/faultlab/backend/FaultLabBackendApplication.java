@@ -10,3 +10,4 @@ public class FaultLabBackendApplication {
         SpringApplication.run(FaultLabBackendApplication.class, args);
     }
 }
+

@@ -17,6 +17,7 @@ import com.faultlab.backend.trace.mapper.TraceSpanMapper;
 import com.faultlab.backend.trace.manager.TraceManager;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,9 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -124,6 +127,21 @@ class ExperimentServiceTests {
         );
         verify(idempotencyConflictScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
         assertThat(TraceContextHolder.get()).isNull();
+    }
+
+    @Test
+    void shouldUseExperimentTraceIdForStartExperimentFlow() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.MQ_BACKLOG);
+        AtomicReference<String> traceIdDuringScenario = new AtomicReference<>();
+        doAnswer(invocation -> {
+            traceIdDuringScenario.set(TraceContextHolder.get().getTraceId());
+            return null;
+        }).when(mqBacklogScenario).execute(anyString(), any());
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(traceIdDuringScenario.get()).isEqualTo(response.getTraceId());
     }
 
     @Test
