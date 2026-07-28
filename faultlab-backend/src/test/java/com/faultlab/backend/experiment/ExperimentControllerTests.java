@@ -1,11 +1,16 @@
 package com.faultlab.backend.experiment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.faultlab.backend.experiment.dto.ExperimentDetailResponse;
 import com.faultlab.backend.experiment.dto.StartExperimentRequest;
 import com.faultlab.backend.experiment.dto.StartExperimentResponse;
+import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.experiment.service.ExperimentService;
+import com.faultlab.backend.metric.dto.MetricResponse;
 import com.faultlab.backend.scenario.model.ExperimentStatus;
 import com.faultlab.backend.scenario.model.ScenarioCode;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,6 +37,9 @@ class ExperimentControllerTests {
 
     @MockBean
     private ExperimentService experimentService;
+
+    @MockBean
+    private ExperimentQueryService experimentQueryService;
 
     @Test
     void shouldStartMqBacklogExperiment() throws Exception {
@@ -87,5 +96,44 @@ class ExperimentControllerTests {
                 .andExpect(jsonPath("$.data.experimentId").value("exp_idempotency"))
                 .andExpect(jsonPath("$.data.traceId").value("trace_idempotency"))
                 .andExpect(jsonPath("$.data.status").value(ExperimentStatus.RUNNING));
+    }
+
+    @Test
+    void shouldGetExperimentDetailWithApiResponse() throws Exception {
+        ExperimentDetailResponse response = new ExperimentDetailResponse();
+        response.setExperimentId("exp-1");
+        response.setScenarioCode(ScenarioCode.MQ_BACKLOG);
+        response.setStatus(ExperimentStatus.RUNNING);
+        response.setTraceId("trace-1");
+        response.setStartTime(LocalDateTime.of(2026, 7, 28, 10, 0));
+        when(experimentQueryService.getExperimentDetail("exp-1")).thenReturn(response);
+
+        mockMvc.perform(get("/api/experiments/exp-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.experimentId").value("exp-1"))
+                .andExpect(jsonPath("$.data.scenarioCode").value(ScenarioCode.MQ_BACKLOG))
+                .andExpect(jsonPath("$.data.traceId").value("trace-1"));
+    }
+
+    @Test
+    void shouldGetExperimentMetricsWithApiResponse() throws Exception {
+        MetricResponse metric = new MetricResponse();
+        metric.setExperimentId("exp-1");
+        metric.setMetricName("publishCount");
+        metric.setMetricValue("10");
+        metric.setMetricUnit("count");
+        metric.setComponent("RabbitMQ");
+        when(experimentQueryService.getExperimentMetrics("exp-1")).thenReturn(List.of(metric));
+
+        mockMvc.perform(get("/api/experiments/exp-1/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data[0].experimentId").value("exp-1"))
+                .andExpect(jsonPath("$.data[0].metricName").value("publishCount"))
+                .andExpect(jsonPath("$.data[0].metricValue").value("10"))
+                .andExpect(jsonPath("$.data[0].component").value("RabbitMQ"));
     }
 }
