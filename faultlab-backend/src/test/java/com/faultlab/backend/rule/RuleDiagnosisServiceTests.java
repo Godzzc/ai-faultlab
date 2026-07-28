@@ -12,6 +12,7 @@ import com.faultlab.backend.metric.entity.FaultMetric;
 import com.faultlab.backend.metric.mapper.FaultMetricMapper;
 import com.faultlab.backend.rule.diagnoser.MqBacklogRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.RuleDiagnoser;
+import com.faultlab.backend.rule.diagnoser.ThreadPoolSaturationRuleDiagnoser;
 import com.faultlab.backend.rule.dto.RuleDiagnosisResult;
 import com.faultlab.backend.rule.service.RuleDiagnosisService;
 import com.faultlab.backend.scenario.model.ScenarioCode;
@@ -60,6 +61,25 @@ class RuleDiagnosisServiceTests {
         assertThat(report.getExperimentId()).isEqualTo("exp-1");
         assertThat(report.getFaultType()).isEqualTo(ScenarioCode.MQ_BACKLOG);
         assertThat(report.getRuleResultJson()).contains("\"experimentId\":\"exp-1\"");
+    }
+
+    @Test
+    void shouldDiagnoseThreadPoolSaturationScenario() {
+        RuleDiagnosisService service = service(List.of(new MqBacklogRuleDiagnoser(), new ThreadPoolSaturationRuleDiagnoser()), objectMapper);
+        when(faultExperimentMapper.selectOne(any(Wrapper.class))).thenReturn(experiment(ScenarioCode.THREAD_POOL_SATURATION));
+        when(faultMetricMapper.selectList(any(Wrapper.class))).thenReturn(threadPoolMetrics());
+        when(diagnosisReportMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        RuleDiagnosisResult result = service.diagnose("exp-1");
+
+        ArgumentCaptor<DiagnosisReport> captor = ArgumentCaptor.forClass(DiagnosisReport.class);
+        verify(diagnosisReportMapper).insert(captor.capture());
+        DiagnosisReport report = captor.getValue();
+        assertThat(result.getMatched()).isTrue();
+        assertThat(result.getFaultType()).isEqualTo(ScenarioCode.THREAD_POOL_SATURATION);
+        assertThat(result.getConfidence()).isEqualTo(0.90);
+        assertThat(report.getFaultType()).isEqualTo(ScenarioCode.THREAD_POOL_SATURATION);
+        assertThat(report.getRuleResultJson()).contains("\"faultType\":\"THREAD_POOL_SATURATION\"");
     }
 
     @Test
@@ -117,6 +137,17 @@ class RuleDiagnosisServiceTests {
                 metric("consumeCount", 20),
                 metric("consumerDelayMs", 1000),
                 metric("avgConsumeMs", 1000)
+        );
+    }
+
+    private List<FaultMetric> threadPoolMetrics() {
+        return List.of(
+                metric("taskCount", 30),
+                metric("acceptedTaskCount", 12),
+                metric("rejectedTaskCount", 18),
+                metric("activeThreadCount", 2),
+                metric("queueSize", 10),
+                metric("avgTaskDurationMs", 3000)
         );
     }
 
