@@ -6,6 +6,7 @@ import com.faultlab.backend.scenario.idempotency.IdempotencySimulatedRequest;
 import com.faultlab.backend.scenario.idempotency.IdempotencySimulatorService;
 import com.faultlab.backend.scenario.model.ScenarioCode;
 import com.faultlab.backend.trace.annotation.TraceSpan;
+import com.faultlab.backend.trace.context.TraceContextPropagator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -64,8 +65,9 @@ public class IdempotencyConflictScenario implements FaultScenario {
 
         List<IdempotencySimulatedRequest> requests = buildRequests(requestCount, duplicateCount, conflictCount, idempotencyKey);
         try {
-            // TODO: Propagate TraceContext with a TaskDecorator or wrapped Runnable in a later iteration.
-            faultLabScenarioExecutor.execute(() -> idempotencySimulatorService.simulate(experimentId, requests, processingDelayMs));
+            faultLabScenarioExecutor.execute(TraceContextPropagator.wrap(
+                    () -> idempotencySimulatorService.simulate(experimentId, requests, processingDelayMs)
+            ));
         } catch (RejectedExecutionException exception) {
             recordRejectedBatchMetrics(experimentId, requestCount, duplicateCount, conflictCount, processingDelayMs);
         }

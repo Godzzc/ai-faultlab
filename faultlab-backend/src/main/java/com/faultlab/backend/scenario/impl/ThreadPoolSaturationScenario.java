@@ -4,6 +4,7 @@ import com.faultlab.backend.metric.service.MetricService;
 import com.faultlab.backend.scenario.FaultScenario;
 import com.faultlab.backend.scenario.model.ScenarioCode;
 import com.faultlab.backend.trace.annotation.TraceSpan;
+import com.faultlab.backend.trace.context.TraceContextPropagator;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -51,8 +52,9 @@ public class ThreadPoolSaturationScenario implements FaultScenario {
         int rejectedTaskCount = 0;
         for (int index = 0; index < taskCount; index++) {
             try {
-                // TODO: Propagate TraceContext with a TaskDecorator or wrapped Runnable in a later iteration.
-                faultLabScenarioExecutor.execute(() -> threadPoolTaskRunner.runBlockingTask(taskSleepMs));
+                faultLabScenarioExecutor.execute(TraceContextPropagator.wrap(
+                        () -> threadPoolTaskRunner.runBlockingTask(taskSleepMs)
+                ));
                 acceptedTaskCount++;
             } catch (RejectedExecutionException exception) {
                 rejectedTaskCount++;
