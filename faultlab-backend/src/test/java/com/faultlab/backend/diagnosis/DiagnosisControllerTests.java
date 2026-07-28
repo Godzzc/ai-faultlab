@@ -1,5 +1,7 @@
 package com.faultlab.backend.diagnosis;
 
+import com.faultlab.backend.diagnosis.dto.DiagnosisReportResponse;
+import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.rule.dto.RuleDiagnosisResult;
 import com.faultlab.backend.rule.service.RuleDiagnosisService;
 import com.faultlab.backend.scenario.model.ScenarioCode;
@@ -11,6 +13,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,6 +26,9 @@ class DiagnosisControllerTests {
 
     @MockBean
     private RuleDiagnosisService ruleDiagnosisService;
+
+    @MockBean
+    private ExperimentQueryService experimentQueryService;
 
     @Test
     void shouldReturnRuleDiagnosisWithApiResponse() throws Exception {
@@ -90,5 +96,22 @@ class DiagnosisControllerTests {
                 .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.IDEMPOTENCY_CONFLICT))
                 .andExpect(jsonPath("$.data.confidence").value(0.90))
                 .andExpect(jsonPath("$.data.matched").value(true));
+    }
+
+    @Test
+    void shouldReturnDiagnosisReportWithApiResponse() throws Exception {
+        DiagnosisReportResponse response = new DiagnosisReportResponse();
+        response.setExperimentId("exp-1");
+        response.setFaultType(ScenarioCode.MQ_BACKLOG);
+        response.setRuleResultJson("{\"matched\":true}");
+        when(experimentQueryService.getDiagnosisReport("exp-1")).thenReturn(response);
+
+        mockMvc.perform(get("/api/diagnosis/exp-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.experimentId").value("exp-1"))
+                .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.MQ_BACKLOG))
+                .andExpect(jsonPath("$.data.ruleResultJson").value("{\"matched\":true}"));
     }
 }
