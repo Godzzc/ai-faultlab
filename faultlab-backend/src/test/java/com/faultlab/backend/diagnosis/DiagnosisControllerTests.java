@@ -68,4 +68,27 @@ class DiagnosisControllerTests {
                 .andExpect(jsonPath("$.data.confidence").value(0.90))
                 .andExpect(jsonPath("$.data.matched").value(true));
     }
+
+    @Test
+    void shouldReturnIdempotencyConflictRuleDiagnosisWithApiResponse() throws Exception {
+        RuleDiagnosisResult result = new RuleDiagnosisResult();
+        result.setExperimentId("exp-idempotency");
+        result.setFaultType(ScenarioCode.IDEMPOTENCY_CONFLICT);
+        result.setFaultName("幂等冲突");
+        result.setConfidence(0.90);
+        result.setMatched(true);
+        result.setReason("同一个幂等 key 同时出现不同请求体和重复提交，疑似幂等冲突。");
+        result.setEvidence(List.of("duplicateCount=20", "hashMismatchCount=8"));
+        result.setSuggestions(List.of("服务端保存 requestHash，避免同一幂等 key 携带不同请求体"));
+        when(ruleDiagnosisService.diagnose("exp-idempotency")).thenReturn(result);
+
+        mockMvc.perform(post("/api/diagnosis/exp-idempotency/rule"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.experimentId").value("exp-idempotency"))
+                .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.IDEMPOTENCY_CONFLICT))
+                .andExpect(jsonPath("$.data.confidence").value(0.90))
+                .andExpect(jsonPath("$.data.matched").value(true));
+    }
 }
