@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
+import TraceNode from './components/TraceNode.vue'
 
 const scenarios = [
   {
@@ -67,13 +68,7 @@ const selectedScenario = computed(() =>
 )
 
 const traceRoots = computed(() => {
-  const data = traceTree.value
-  if (!data) return []
-  if (Array.isArray(data)) return data
-  if (Array.isArray(data.roots)) return data.roots
-  if (Array.isArray(data.rootSpans)) return data.rootSpans
-  if (Array.isArray(data.children)) return data.children
-  return [data]
+  return Array.isArray(traceTree.value?.roots) ? traceTree.value.roots : []
 })
 
 function selectScenario(code) {
@@ -98,6 +93,14 @@ async function requestJson(url, options = {}) {
     throw new Error(payload.message || '请求失败')
   }
   return payload?.data ?? null
+}
+
+async function fetchTraceTree(traceId) {
+  if (!traceId) {
+    traceTree.value = null
+    return
+  }
+  traceTree.value = await requestJson(`/api/traces/${encodeURIComponent(traceId)}`)
 }
 
 async function startExperiment() {
@@ -142,9 +145,7 @@ async function refreshExperimentData() {
     metrics.value = Array.isArray(metricList) ? metricList : []
     diagnosisReport.value = report
     ruleDiagnosis.value = parseRuleDiagnosis(report?.ruleResultJson) ?? ruleDiagnosis.value
-    if (detail?.traceId) {
-      traceTree.value = await requestJson(`/api/traces/${encodeURIComponent(detail.traceId)}`)
-    }
+    await fetchTraceTree(detail?.traceId || experiment.value?.traceId)
   } catch (error) {
     errorMessage.value = error.message || '刷新实验数据失败'
   } finally {
@@ -384,40 +385,10 @@ function formatBoolean(value) {
           <div v-if="traceRoots.length" class="trace-tree">
             <TraceNode v-for="node in traceRoots" :key="node.spanId || node.operationName" :node="node" />
           </div>
-          <p v-else class="empty">暂无数据</p>
+          <p v-else class="empty">暂无 Trace 数据</p>
         </section>
       </section>
     </section>
   </main>
 </template>
 
-<script>
-export default {
-  components: {
-    TraceNode: {
-      name: 'TraceNode',
-      props: {
-        node: {
-          type: Object,
-          required: true,
-        },
-      },
-      template: `
-        <div class="trace-node">
-          <div class="trace-row">
-            <strong>{{ node.operationName || 'unknown.operation' }}</strong>
-            <span>{{ node.component || 'unknown' }}</span>
-            <span>{{ node.durationMs ?? '暂无数据' }} ms</span>
-            <span :class="['trace-status', String(node.status || '').toLowerCase()]">
-              {{ node.status || '暂无数据' }}
-            </span>
-          </div>
-          <div v-if="node.children && node.children.length" class="trace-children">
-            <TraceNode v-for="child in node.children" :key="child.spanId || child.operationName" :node="child" />
-          </div>
-        </div>
-      `,
-    },
-  },
-}
-</script>
