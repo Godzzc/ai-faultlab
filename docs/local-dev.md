@@ -1,64 +1,126 @@
-# Local Development Infrastructure
+# Local Development
 
-This setup starts the local infrastructure required by `faultlab-backend`: MySQL, Redis, and RabbitMQ.
+本文档只记录本地开发环境的常用启动和排查命令。完整演示流程见 [demo-guide.md](./demo-guide.md)。
 
-## Prepare Environment
+## Docker Compose
+
+首次准备环境变量：
 
 ```bash
 cp deploy/.env.example deploy/.env
 ```
 
-`deploy/.env` is ignored by Git. Keep local passwords and machine-specific settings there.
-
-## Start Components
+启动基础组件：
 
 ```bash
 cd deploy
 docker compose up -d
-```
-
-## Check Status
-
-```bash
 docker compose ps
 ```
 
-## View Logs
+正常应启动：
+
+- `faultlab-mysql`
+- `faultlab-redis`
+- `faultlab-rabbitmq`
+
+查看日志：
 
 ```bash
 docker compose logs -f mysql
 docker compose logs -f rabbitmq
 ```
 
-## Stop Components
+停止容器但保留数据卷：
 
 ```bash
 docker compose down
 ```
 
-## Clean Data
+停止容器并清理数据卷：
 
 ```bash
 docker compose down -v
 ```
 
-MySQL runs `../faultlab-backend/src/main/resources/db/schema.sql` only when the MySQL data volume is first initialized. If `schema.sql` changes after MySQL has already started once, run `docker compose down -v` and start again to recreate the database and tables.
+区别：
 
-## RabbitMQ Management
+- `docker compose down`：删除容器和网络，保留 MySQL / Redis / RabbitMQ 数据卷。
+- `docker compose down -v`：同时删除数据卷，MySQL 会在下次启动时重新执行 `schema.sql` 初始化表结构。
 
-Open:
+## Backend
+
+建议使用 IDEA 启动：
 
 ```text
-http://localhost:15672
+FaultLabBackendApplication
 ```
 
-Use the values from `deploy/.env` for the RabbitMQ username and password.
+IDEA Environment variables 示例：
 
-## Start Backend Locally
+```text
+MYSQL_HOST=localhost;MYSQL_PORT=3306;MYSQL_DATABASE=faultlab;MYSQL_USERNAME=faultlab;MYSQL_PASSWORD=faultlab123456;RABBITMQ_HOST=localhost;RABBITMQ_PORT=5672;RABBITMQ_USERNAME=faultlab;RABBITMQ_PASSWORD=faultlab123456;REDIS_HOST=localhost;REDIS_PORT=6379
+```
+
+健康检查：
+
+```text
+GET http://localhost:8080/api/health
+```
+
+也可以命令行启动：
 
 ```bash
 cd faultlab-backend
 mvn spring-boot:run
 ```
 
-The backend defaults already point to local MySQL and RabbitMQ. When using the example `.env`, set matching environment variables before starting the backend if your shell does not load `deploy/.env` automatically.
+## RabbitMQ Management
+
+管理台地址：
+
+```text
+http://localhost:15672
+```
+
+默认本地账号密码来自 `deploy/.env.example`：
+
+```text
+faultlab / faultlab123456
+```
+
+如果复制后的 `deploy/.env` 修改过账号密码，后端 IDEA 环境变量也需要同步修改。
+
+## Frontend
+
+启动前端：
+
+```bash
+cd faultlab-frontend
+npm install
+npm run dev
+```
+
+访问：
+
+```text
+http://localhost:5173
+```
+
+前端 Vite 已配置代理：
+
+```text
+/api -> http://localhost:8080
+```
+
+如果 PowerShell 执行策略拦截 `npm`，可以使用：
+
+```bash
+npm.cmd run build
+```
+
+## Notes
+
+- `deploy/.env` 不应提交到 Git。
+- MySQL 初始化脚本挂载自 `faultlab-backend/src/main/resources/db/schema.sql`，不要维护第二份 schema。
+- 修改 `schema.sql` 后，如果已有 MySQL volume，需要执行 `docker compose down -v` 后重新启动才会重新初始化。
