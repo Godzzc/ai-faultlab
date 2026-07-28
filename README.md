@@ -1,107 +1,185 @@
 # AI FaultLab
 
-AI FaultLab 是一个面向 Java 后端故障排查场景的故障演练与智能诊断平台。
+AI FaultLab 是一个面向 Java 后端典型故障的故障演练与智能诊断平台。
 
-系统支持一键模拟 MQ 消息堆积、线程池饱和、幂等冲突等典型后端问题，并结合 Trace 调用链、运行指标、规则引擎、Runbook RAG 和 AI 诊断服务生成结构化诊断报告。
+它不是简单的 AI 外壳，而是围绕故障场景模拟、指标采集、Trace 链路追踪、规则诊断，以及后续 AI / Runbook RAG 扩展，形成一个可以演示的诊断闭环。
 
-## 项目定位
+## 当前已支持能力
 
-本项目不是传统业务系统，也不是生产级 APM 平台，而是一个用于后端故障复现、链路观测和智能诊断的工程化实验平台。
+### MQ_BACKLOG：MQ 消息堆积
 
-核心流程：
+- 通过 RabbitMQ 发送消息
+- 消费端延迟消费，模拟慢消费导致的堆积
+- 记录 `publishCount`、`consumeCount`、`avgConsumeMs`、`consumerDelayMs` 等指标
+- 支持规则诊断，输出 `evidence` 和 `suggestions`
+
+### THREAD_POOL_SATURATION：线程池饱和
+
+- 使用专用线程池，不影响 Spring Boot 其他异步任务
+- 异步提交长任务，模拟活跃线程打满、队列堆积、任务拒绝
+- 记录 `activeThreadCount`、`queueSize`、`rejectedTaskCount`、`avgTaskDurationMs` 等指标
+- 支持规则诊断
+
+### IDEMPOTENCY_CONFLICT：幂等冲突
+
+- 使用 Redis `SETNX` 模拟幂等检查快路径
+- 基于 `idempotencyKey` 和 `requestHash` 判断重复提交和参数冲突
+- 记录 `duplicateCount`、`hashMismatchCount`、`redisSetNxFailCount`、`redisErrorCount` 等指标
+- 支持规则诊断
+
+## 核心流程
 
 ```text
-触发故障
-  -> 采集 Trace / 指标
-  -> 规则引擎初步诊断
-  -> Runbook RAG 检索
-  -> AI 生成诊断报告
+用户选择故障场景
+  -> 启动故障演练
+  -> 写入实验记录
+  -> 执行故障模拟
+  -> 采集指标
+  -> 写入 Trace
+  -> 执行规则诊断
+  -> 生成结构化诊断结果
+  -> 前端 Dashboard 展示
 ```
-
-## 核心功能
-
-* MQ 消息堆积演练
-* 线程池饱和 / 长任务阻塞演练
-* 幂等冲突与一致性演练
-* 轻量级 Trace 链路追踪
-* Runbook RAG 检索
-* AI 结构化诊断报告
 
 ## 技术栈
 
-### 后端主服务
+后端：
 
-* Java 17
-* Spring Boot 3.x
-* MySQL
-* Redis
-* RabbitMQ
+- Java 17
+- Spring Boot 3.x
+- MyBatis-Plus
+- MySQL
+- Redis
+- RabbitMQ
+- JUnit5 / Mockito
 
-### AI 诊断服务
+前端：
 
-* Python
-* FastAPI
-* RAG
-* 大模型 API
+- Vue3
+- Vite
+- 原生 CSS
+- `fetch`
 
-### 部署
+部署 / 本地环境：
 
-* Docker
-* Docker Compose
-* Nginx
+- Docker
+- Docker Compose
 
 ## 项目结构
 
 ```text
 ai-faultlab
-├── faultlab-backend        # Spring Boot 主服务
-├── faultlab-ai-service     # Python AI 诊断服务
-├── faultlab-frontend       # 前端页面
-├── faultlab-trace-sdk      # 轻量级 Trace SDK
-├── faultlab-runbook        # Runbook 故障知识库
-├── deploy                  # Docker / Nginx 部署配置
-├── docs                    # 项目文档
+├── faultlab-backend       # Spring Boot 后端主服务
+├── faultlab-frontend      # Vue3 + Vite Dashboard
+├── faultlab-ai-service    # AI 诊断服务目录，当前仍是后续规划重点
+├── faultlab-runbook       # Runbook 文档目录
+├── faultlab-trace-sdk     # Trace SDK 目录
+├── deploy                 # Docker Compose 本地环境
+├── docs                   # 项目文档
+├── scripts                # 辅助脚本
 └── README.md
 ```
 
-## 第一版计划
+## 本地启动方式
 
-V1 重点完成三个可演示场景：
+### 1. 启动 Docker Compose
 
-| 场景      | 说明                      |
-| ------- | ----------------------- |
-| MQ 消息堆积 | 模拟生产速度大于消费速度导致队列积压      |
-| 线程池饱和   | 模拟长任务占满线程池导致任务排队        |
-| 幂等冲突    | 模拟重复提交下 Redis 拦截和 DB 兜底 |
-
-## 项目亮点
-
-* 设计插件化故障场景模型，统一故障触发、证据采集、规则诊断和 AI 报告生成流程。
-* 自研轻量级 Trace SDK，基于 traceId / spanId / parentSpanId 还原故障调用链。
-* 结合规则引擎和 Runbook RAG，避免 AI 诊断完全依赖大模型猜测。
-* Java 主服务负责故障演练与链路采集，Python AI 服务负责 RAG 检索和诊断报告生成。
-
-## 本地启动
+建议在 WSL 中执行：
 
 ```bash
-git clone https://github.com/your-username/ai-faultlab.git
-cd ai-faultlab
-```
-
-后续支持：
-
-```bash
-cd deploy
+cd /mnt/d/JavaProjects/ai-faultlab/deploy
 docker compose up -d
+docker compose ps
 ```
 
-## 后续规划
+正常应看到以下容器启动：
 
-* 缓存击穿诊断
-* 慢 SQL 诊断
-* 消息回放与问题复现
-* Agent 工具调用安全审计
-* Java 21 虚拟线程对比实验
+- `faultlab-mysql`
+- `faultlab-redis`
+- `faultlab-rabbitmq`
+
+RabbitMQ 管理台：
+
+```text
+http://localhost:15672
+```
+
+### 2. 启动后端
+
+使用 IDEA 启动：
+
+```text
+FaultLabBackendApplication
+```
+
+建议配置 Environment variables：
+
+```text
+MYSQL_HOST=localhost;MYSQL_PORT=3306;MYSQL_DATABASE=faultlab;MYSQL_USERNAME=faultlab;MYSQL_PASSWORD=faultlab123456;RABBITMQ_HOST=localhost;RABBITMQ_PORT=5672;RABBITMQ_USERNAME=faultlab;RABBITMQ_PASSWORD=faultlab123456;REDIS_HOST=localhost;REDIS_PORT=6379
+```
+
+健康检查：
+
+```text
+GET http://localhost:8080/api/health
+```
+
+### 3. 启动前端
+
+```bash
+cd faultlab-frontend
+npm install
+npm run dev
+```
+
+访问：
+
+```text
+http://localhost:5173
+```
+
+如果 PowerShell 执行策略拦截 `npm`，可以使用：
+
+```bash
+npm.cmd run build
+```
+
+## 常用接口
+
+- `POST /api/experiments/start`：启动故障演练
+- `GET /api/experiments/{experimentId}`：查询实验详情
+- `GET /api/experiments/{experimentId}/metrics`：查询实验指标
+- `POST /api/diagnosis/{experimentId}/rule`：执行规则诊断
+- `GET /api/diagnosis/{experimentId}`：查询诊断报告
+- `GET /api/traces/{traceId}`：查询 Trace 树
+
+## 演示步骤
+
+1. 打开前端 Dashboard：`http://localhost:5173`
+2. 选择 `MQ_BACKLOG`
+3. 使用默认参数，或设置 `messageCount=10`、`consumerDelayMs=1000`
+4. 点击“开始演练”
+5. 查看实验信息和指标列表
+6. 点击“执行规则诊断”
+7. 查看 `faultType`、`confidence`、`evidence`、`suggestions`
+8. 切换 `THREAD_POOL_SATURATION` 和 `IDEMPOTENCY_CONFLICT` 重复演示
+9. 说明 Trace 树当前已接入接口，但异步场景下 `TraceContext` 跨线程传播仍是后续 TODO
+
+## 当前项目亮点
+
+- 自研轻量级 Trace，基于 `traceId` / `spanId` / `parentSpanId` 记录关键调用节点
+- 基于 `@TraceSpan` + AOP 自动埋点，降低业务侵入
+- 支持三个 Java 后端典型故障场景演练
+- 基于指标的规则诊断，避免直接让 AI 凭空判断
+- Docker Compose 编排 MySQL、Redis、RabbitMQ，可本地一键启动
+- Vue Dashboard 支持故障演练闭环可视化展示
+
+## 已知限制 / TODO
+
+- 当前 AI 诊断和 Runbook RAG 还未实现
+- 当前 `TraceContext` 跨线程 / MQ 消息传播还未完善
+- 当前前端是 MVP 单页，没有实验列表分页、自动轮询和图表
+- 当前规则诊断是第一版 Java 规则判断，后续可接入 AI 诊断报告生成
 
 ## License
 
