@@ -10,6 +10,7 @@ import com.faultlab.backend.experiment.entity.FaultExperiment;
 import com.faultlab.backend.experiment.mapper.FaultExperimentMapper;
 import com.faultlab.backend.metric.entity.FaultMetric;
 import com.faultlab.backend.metric.mapper.FaultMetricMapper;
+import com.faultlab.backend.rule.diagnoser.IdempotencyConflictRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.MqBacklogRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.RuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.ThreadPoolSaturationRuleDiagnoser;
@@ -83,6 +84,25 @@ class RuleDiagnosisServiceTests {
     }
 
     @Test
+    void shouldDiagnoseIdempotencyConflictScenario() {
+        RuleDiagnosisService service = service(List.of(new MqBacklogRuleDiagnoser(), new IdempotencyConflictRuleDiagnoser()), objectMapper);
+        when(faultExperimentMapper.selectOne(any(Wrapper.class))).thenReturn(experiment(ScenarioCode.IDEMPOTENCY_CONFLICT));
+        when(faultMetricMapper.selectList(any(Wrapper.class))).thenReturn(idempotencyMetrics());
+        when(diagnosisReportMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        RuleDiagnosisResult result = service.diagnose("exp-1");
+
+        ArgumentCaptor<DiagnosisReport> captor = ArgumentCaptor.forClass(DiagnosisReport.class);
+        verify(diagnosisReportMapper).insert(captor.capture());
+        DiagnosisReport report = captor.getValue();
+        assertThat(result.getMatched()).isTrue();
+        assertThat(result.getFaultType()).isEqualTo(ScenarioCode.IDEMPOTENCY_CONFLICT);
+        assertThat(result.getConfidence()).isEqualTo(0.90);
+        assertThat(report.getFaultType()).isEqualTo(ScenarioCode.IDEMPOTENCY_CONFLICT);
+        assertThat(report.getRuleResultJson()).contains("\"faultType\":\"IDEMPOTENCY_CONFLICT\"");
+    }
+
+    @Test
     void shouldUpdateDiagnosisReportWhenExists() {
         RuleDiagnosisService service = service(List.of(new MqBacklogRuleDiagnoser()), objectMapper);
         DiagnosisReport existingReport = new DiagnosisReport();
@@ -148,6 +168,21 @@ class RuleDiagnosisServiceTests {
                 metric("activeThreadCount", 2),
                 metric("queueSize", 10),
                 metric("avgTaskDurationMs", 3000)
+        );
+    }
+
+    private List<FaultMetric> idempotencyMetrics() {
+        return List.of(
+                metric("requestCount", 30),
+                metric("duplicateCount", 20),
+                metric("conflictCount", 8),
+                metric("acceptedCount", 1),
+                metric("rejectedDuplicateCount", 20),
+                metric("hashMismatchCount", 8),
+                metric("redisSetNxSuccessCount", 1),
+                metric("redisSetNxFailCount", 28),
+                metric("redisErrorCount", 0),
+                metric("avgCheckDurationMs", 10)
         );
     }
 

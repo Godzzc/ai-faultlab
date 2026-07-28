@@ -6,6 +6,7 @@ import com.faultlab.backend.experiment.dto.StartExperimentResponse;
 import com.faultlab.backend.experiment.service.ExperimentRecordService;
 import com.faultlab.backend.experiment.service.ExperimentService;
 import com.faultlab.backend.scenario.FaultScenario;
+import com.faultlab.backend.scenario.impl.IdempotencyConflictScenario;
 import com.faultlab.backend.scenario.impl.ThreadPoolSaturationScenario;
 import com.faultlab.backend.scenario.mq.MqBacklogScenario;
 import com.faultlab.backend.scenario.model.ExperimentStatus;
@@ -35,6 +36,7 @@ class ExperimentServiceTests {
     private final TraceManager traceManager = new TraceManager(traceSpanMapper);
     private final FaultScenario mqBacklogScenario = mock(FaultScenario.class);
     private final FaultScenario threadPoolSaturationScenario = mock(FaultScenario.class);
+    private final FaultScenario idempotencyConflictScenario = mock(FaultScenario.class);
     private ExperimentService experimentService;
 
     @BeforeEach
@@ -43,10 +45,12 @@ class ExperimentServiceTests {
         when(mqBacklogScenario.scenarioName()).thenReturn(MqBacklogScenario.SCENARIO_NAME);
         when(threadPoolSaturationScenario.scenarioCode()).thenReturn(ScenarioCode.THREAD_POOL_SATURATION);
         when(threadPoolSaturationScenario.scenarioName()).thenReturn(ThreadPoolSaturationScenario.SCENARIO_NAME);
+        when(idempotencyConflictScenario.scenarioCode()).thenReturn(ScenarioCode.IDEMPOTENCY_CONFLICT);
+        when(idempotencyConflictScenario.scenarioName()).thenReturn(IdempotencyConflictScenario.SCENARIO_NAME);
         experimentService = new ExperimentService(
                 experimentRecordService,
                 traceManager,
-                List.of(mqBacklogScenario, threadPoolSaturationScenario)
+                List.of(mqBacklogScenario, threadPoolSaturationScenario, idempotencyConflictScenario)
         );
     }
 
@@ -101,9 +105,31 @@ class ExperimentServiceTests {
     }
 
     @Test
+    void shouldStartIdempotencyConflictScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.IDEMPOTENCY_CONFLICT);
+        request.setParams(Map.of("requestCount", 30, "duplicateCount", 20, "conflictCount", 8));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        assertThat(response.getStatus()).isEqualTo(ExperimentStatus.RUNNING);
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.IDEMPOTENCY_CONFLICT),
+                eq(IdempotencyConflictScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(idempotencyConflictScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+        assertThat(TraceContextHolder.get()).isNull();
+    }
+
+    @Test
     void shouldRejectUnsupportedScenarioCode() {
         StartExperimentRequest request = new StartExperimentRequest();
-        request.setScenarioCode("IDEMPOTENCY_CONFLICT");
+        request.setScenarioCode("UNKNOWN_SCENARIO");
 
         assertThatThrownBy(() -> experimentService.startExperiment(request))
                 .isInstanceOf(BusinessException.class)
