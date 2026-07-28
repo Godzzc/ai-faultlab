@@ -50,4 +50,23 @@ class ExperimentControllerTests {
                 .andExpect(jsonPath("$.data.traceId").value("trace_123"))
                 .andExpect(jsonPath("$.data.status").value(ExperimentStatus.RUNNING));
     }
+
+    @Test
+    void shouldStartThreadPoolSaturationExperiment() throws Exception {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.THREAD_POOL_SATURATION);
+        request.setParams(Map.of("taskCount", 30, "taskSleepMs", 3000));
+        when(experimentService.startExperiment(any(StartExperimentRequest.class)))
+                .thenReturn(new StartExperimentResponse("exp_threadpool", "trace_threadpool", ExperimentStatus.RUNNING));
+
+        mockMvc.perform(post("/api/experiments/start")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.experimentId").value("exp_threadpool"))
+                .andExpect(jsonPath("$.data.traceId").value("trace_threadpool"))
+                .andExpect(jsonPath("$.data.status").value(ExperimentStatus.RUNNING));
+    }
 }

@@ -45,4 +45,27 @@ class DiagnosisControllerTests {
                 .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.MQ_BACKLOG))
                 .andExpect(jsonPath("$.data.matched").value(true));
     }
+
+    @Test
+    void shouldReturnThreadPoolSaturationRuleDiagnosisWithApiResponse() throws Exception {
+        RuleDiagnosisResult result = new RuleDiagnosisResult();
+        result.setExperimentId("exp-threadpool");
+        result.setFaultType(ScenarioCode.THREAD_POOL_SATURATION);
+        result.setFaultName("线程池饱和");
+        result.setConfidence(0.90);
+        result.setMatched(true);
+        result.setReason("线程池出现拒绝任务且队列存在堆积，线程池疑似已饱和。");
+        result.setEvidence(List.of("rejectedTaskCount=18", "queueSize=10"));
+        result.setSuggestions(List.of("合理设置任务队列容量"));
+        when(ruleDiagnosisService.diagnose("exp-threadpool")).thenReturn(result);
+
+        mockMvc.perform(post("/api/diagnosis/exp-threadpool/rule"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.experimentId").value("exp-threadpool"))
+                .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.THREAD_POOL_SATURATION))
+                .andExpect(jsonPath("$.data.confidence").value(0.90))
+                .andExpect(jsonPath("$.data.matched").value(true));
+    }
 }

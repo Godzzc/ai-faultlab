@@ -6,6 +6,7 @@ import com.faultlab.backend.experiment.dto.StartExperimentResponse;
 import com.faultlab.backend.experiment.service.ExperimentRecordService;
 import com.faultlab.backend.experiment.service.ExperimentService;
 import com.faultlab.backend.scenario.FaultScenario;
+import com.faultlab.backend.scenario.impl.ThreadPoolSaturationScenario;
 import com.faultlab.backend.scenario.mq.MqBacklogScenario;
 import com.faultlab.backend.scenario.model.ExperimentStatus;
 import com.faultlab.backend.scenario.model.ScenarioCode;
@@ -33,16 +34,19 @@ class ExperimentServiceTests {
     private final TraceSpanMapper traceSpanMapper = mock(TraceSpanMapper.class);
     private final TraceManager traceManager = new TraceManager(traceSpanMapper);
     private final FaultScenario mqBacklogScenario = mock(FaultScenario.class);
+    private final FaultScenario threadPoolSaturationScenario = mock(FaultScenario.class);
     private ExperimentService experimentService;
 
     @BeforeEach
     void setUp() {
         when(mqBacklogScenario.scenarioCode()).thenReturn(ScenarioCode.MQ_BACKLOG);
         when(mqBacklogScenario.scenarioName()).thenReturn(MqBacklogScenario.SCENARIO_NAME);
+        when(threadPoolSaturationScenario.scenarioCode()).thenReturn(ScenarioCode.THREAD_POOL_SATURATION);
+        when(threadPoolSaturationScenario.scenarioName()).thenReturn(ThreadPoolSaturationScenario.SCENARIO_NAME);
         experimentService = new ExperimentService(
                 experimentRecordService,
                 traceManager,
-                List.of(mqBacklogScenario)
+                List.of(mqBacklogScenario, threadPoolSaturationScenario)
         );
     }
 
@@ -75,9 +79,31 @@ class ExperimentServiceTests {
     }
 
     @Test
+    void shouldStartThreadPoolSaturationScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.THREAD_POOL_SATURATION);
+        request.setParams(Map.of("taskCount", 30, "taskSleepMs", 3000));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        assertThat(response.getStatus()).isEqualTo(ExperimentStatus.RUNNING);
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.THREAD_POOL_SATURATION),
+                eq(ThreadPoolSaturationScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(threadPoolSaturationScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+        assertThat(TraceContextHolder.get()).isNull();
+    }
+
+    @Test
     void shouldRejectUnsupportedScenarioCode() {
         StartExperimentRequest request = new StartExperimentRequest();
-        request.setScenarioCode("THREAD_POOL_SATURATION");
+        request.setScenarioCode("IDEMPOTENCY_CONFLICT");
 
         assertThatThrownBy(() -> experimentService.startExperiment(request))
                 .isInstanceOf(BusinessException.class)
