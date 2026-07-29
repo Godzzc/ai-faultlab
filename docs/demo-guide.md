@@ -1,31 +1,77 @@
 # AI FaultLab Demo Guide
 
-本文档用于面试或技术分享时演示 AI FaultLab 的故障演练闭环。
+本文档用于演示 AI FaultLab v0.3.0 的完整诊断链路：
 
-## 演示目标
+```text
+故障演练
+  -> Metrics / Trace
+  -> 规则诊断
+  -> Evidence Package
+  -> Python AI Service
+  -> ModelRouter
+  -> 百炼 LLM
+  -> JSON 校验 / fallback
+  -> Java 落库
+  -> Vue Dashboard 展示
+```
 
-通过一个前端 Dashboard 展示：
+## 环境准备
 
-- 故障演练：选择典型 Java 后端故障并触发模拟
-- 指标采集：观察实验过程中写入的关键指标
-- 规则诊断：基于指标输出结构化诊断结果
-- 前端可视化：展示实验信息、指标、诊断证据、建议和 Trace 树
+需要本地具备：
 
-## 演示前准备
+- Docker / Docker Compose
+- Java 17
+- Maven
+- Python 3.11+
+- Node.js / npm
+- 阿里云百炼 API Key
 
-确认以下组件已经就绪：
+只需要配置一个敏感环境变量：
 
-- Docker Compose 已启动
-- 后端 `FaultLabBackendApplication` 已启动
-- 前端 Vite dev server 已启动
-- RabbitMQ 管理台可访问：`http://localhost:15672`
-- MySQL 表已通过 `schema.sql` 初始化
+```text
+DASHSCOPE_API_KEY
+```
 
-基础检查：
+其他 LLM 参数使用 `faultlab-ai-service/app/config.py` 的默认值。
+
+## 启动 Docker
 
 ```bash
 cd deploy
+docker compose up -d
 docker compose ps
+```
+
+正常应看到：
+
+- `faultlab-mysql`
+- `faultlab-redis`
+- `faultlab-rabbitmq`
+
+RabbitMQ 管理台：
+
+```text
+http://localhost:15672
+```
+
+默认本地账号通常是：
+
+```text
+faultlab / faultlab123456
+```
+
+## 启动 Java Backend
+
+推荐使用 IDEA 启动：
+
+```text
+FaultLabBackendApplication
+```
+
+本地环境变量示例：
+
+```text
+MYSQL_HOST=localhost;MYSQL_PORT=3306;MYSQL_DATABASE=faultlab;MYSQL_USERNAME=faultlab;MYSQL_PASSWORD=faultlab123456;RABBITMQ_HOST=localhost;RABBITMQ_PORT=5672;RABBITMQ_USERNAME=faultlab;RABBITMQ_PASSWORD=faultlab123456;REDIS_HOST=localhost;REDIS_PORT=6379
 ```
 
 健康检查：
@@ -34,110 +80,239 @@ docker compose ps
 GET http://localhost:8080/api/health
 ```
 
-前端页面：
+## 启动 Python AI Service
+
+PowerShell 中设置长期环境变量：
+
+```powershell
+setx DASHSCOPE_API_KEY "你的真实百炼APIKey"
+```
+
+重新打开 PowerShell 后启动服务：
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+如果未使用虚拟环境：
+
+```bash
+cd faultlab-ai-service
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+健康检查：
+
+```text
+GET http://localhost:8000/ai/health
+```
+
+## 启动前端
+
+```bash
+cd faultlab-frontend
+npm install
+npm.cmd run dev
+```
+
+访问：
 
 ```text
 http://localhost:5173
 ```
 
-## 演示路径一：MQ 消息堆积
+## MQ_BACKLOG 演示
 
-页面操作：
-
-1. 选择 `MQ_BACKLOG`
-2. 参数建议：
+1. 打开 Dashboard。
+2. 选择 `MQ_BACKLOG`。
+3. 参数建议：
    - `messageCount=10`
-   - `consumerDelayMs=1000` 或 `5000`
-3. 点击“开始演练”
-4. 点击“执行规则诊断”
+   - `consumerDelayMs=1000`
+4. 点击“开始演练”。
+5. 查看 Metrics 表格。
+6. 查看 Trace 树。
+7. 点击“执行规则诊断”。
+8. 点击“生成 AI 诊断报告”。
 
 预期结果：
 
-- 指标中出现 `publishCount`、`consumeCount`、`consumerDelayMs`、`avgConsumeMs` 等
-- 诊断结果 `faultType=MQ_BACKLOG`
-- `confidence` 根据积压和慢消费证据返回
-- `suggestions` 包含增加消费者并发、排查慢消费等建议
+- Metrics 中包含 `publishCount`、`consumeCount`、`consumerDelayMs`、`avgConsumeMs`
+- 规则诊断返回 `faultType=MQ_BACKLOG`
+- AI Report 展示 summary、evidence、rootCauses、suggestions
+- Python AI Service 日志打印 selected model 和 route reason
 
-## 演示路径二：线程池饱和
+## THREAD_POOL_SATURATION 演示
 
-页面操作：
-
-1. 选择 `THREAD_POOL_SATURATION`
+1. 选择 `THREAD_POOL_SATURATION`。
 2. 参数建议：
    - `taskCount=30`
    - `taskSleepMs=3000`
-3. 点击“开始演练”
-4. 点击“执行规则诊断”
+3. 点击“开始演练”。
+4. 点击“执行规则诊断”。
+5. 点击“生成 AI 诊断报告”。
 
 预期结果：
 
-- 指标中出现 `acceptedTaskCount`、`rejectedTaskCount`、`activeThreadCount`、`queueSize`
-- 诊断结果 `faultType=THREAD_POOL_SATURATION`
-- `suggestions` 包含调整线程池参数、限流、拆分长任务等建议
+- Metrics 中包含 `acceptedTaskCount`、`rejectedTaskCount`、`activeThreadCount`、`queueSize`
+- 规则诊断返回 `faultType=THREAD_POOL_SATURATION`
+- AI Report 对线程池饱和风险给出结构化总结
 
-## 演示路径三：幂等冲突
+## IDEMPOTENCY_CONFLICT 演示
 
-页面操作：
-
-1. 选择 `IDEMPOTENCY_CONFLICT`
+1. 选择 `IDEMPOTENCY_CONFLICT`。
 2. 参数建议：
    - `requestCount=30`
    - `duplicateCount=20`
    - `conflictCount=8`
    - `processingDelayMs=1000`
-3. 点击“开始演练”
-4. 点击“执行规则诊断”
+3. 点击“开始演练”。
+4. 点击“执行规则诊断”。
+5. 点击“生成 AI 诊断报告”。
 
 预期结果：
 
-- 指标中出现 `duplicateCount`、`hashMismatchCount`、`redisSetNxFailCount`
-- 诊断结果 `faultType=IDEMPOTENCY_CONFLICT`
-- `suggestions` 包含 `Idempotency-Key`、`requestHash`、Redis 快路径、DB 唯一索引兜底等建议
+- Metrics 中包含 `duplicateCount`、`hashMismatchCount`、`redisSetNxFailCount`
+- 规则诊断返回 `faultType=IDEMPOTENCY_CONFLICT`
+- AI Report 对重复提交、参数冲突或幂等 key 风险给出结构化总结
+
+## 规则诊断
+
+规则诊断由 Java Backend 执行：
+
+```text
+POST /api/diagnosis/{experimentId}/rule
+```
+
+规则诊断结果会保存到 `diagnosis_report.rule_result_json`，也是 AI Evidence Package 的关键输入。
+
+## AI 诊断
+
+AI 诊断由 Java Backend 触发：
+
+```text
+POST /api/diagnosis/{experimentId}/ai/generate
+```
+
+Java Backend 会：
+
+1. 查询实验信息
+2. 查询 Metrics
+3. 查询 Trace 树
+4. 查询或生成规则诊断
+5. 组装 Evidence Package
+6. 调用 Python AI Service
+7. 保存 AI 报告到 `diagnosis_report.ai_report_json`
+
+如果 Python AI Service 未启动、百炼调用失败或 JSON 非法，后端会保存并返回 fallback 报告。
+
+## Trace 树展示
+
+Trace 树由前端调用：
+
+```text
+GET /api/traces/{traceId}
+```
+
+Dashboard 会展示 span 的 operation、component、duration、status 和时间信息。
 
 ## 常见问题排查
 
 ### RabbitMQ Connection refused
 
-检查 Docker Compose 中 RabbitMQ 是否启动，以及 5672 端口是否映射：
+检查 RabbitMQ 容器是否启动：
 
 ```bash
 cd deploy
 docker compose ps
+docker compose logs -f rabbitmq
 ```
+
+确认后端连接的是 `localhost:5672`。
 
 ### RabbitMQ ACCESS_REFUSED
 
-检查 IDEA 后端启动配置中的环境变量：
+检查 Java Backend 环境变量：
 
 ```text
 RABBITMQ_USERNAME=faultlab
 RABBITMQ_PASSWORD=faultlab123456
 ```
 
-如果 `deploy/.env` 中使用了不同账号密码，后端环境变量也需要保持一致。
+如果 `deploy/.env` 修改过账号密码，IDEA 中的后端环境变量也要同步。
 
-### 前端请求失败
+### AI Service fallback=true
 
-检查：
+常见原因：
 
-- 后端是否已启动在 `http://localhost:8080`
-- Vite 代理是否配置 `/api -> http://localhost:8080`
-- 前端是否通过 `npm run dev` 启动
+- 未配置 `DASHSCOPE_API_KEY`
+- `DASHSCOPE_API_KEY` 配置后没有重新打开 PowerShell
+- 百炼接口不可用或超时
+- LLM 返回内容不是合法 JSON
+- `settings.llm_enabled=False`
 
-### Trace 树为空
+先检查：
 
-当前异步任务 `TraceContext` 尚未跨线程传播，部分 Span 可能写入独立 `traceId`。这是当前 V1 已知限制，后续可以通过 `TaskDecorator` 或包装 `Runnable` 传播上下文。
-
-### 修改 schema.sql 后表结构没变化
-
-MySQL 初始化脚本只会在数据卷首次创建时执行。需要清理 volume 后重新启动：
-
-```bash
-cd deploy
-docker compose down -v
-docker compose up -d
+```text
+GET http://localhost:8000/ai/health
 ```
 
-## 面试讲解建议
+再查看 uvicorn 日志中的 fallback reason。
 
-这个项目不是简单的 CRUD 或 AI 调接口，而是围绕 Java 后端典型故障做了一个演练和诊断闭环。用户可以在前端选择故障场景，后端触发真实中间件或线程池行为，采集指标和 Trace，再通过规则诊断生成 evidence 和 suggestions。后续 AI 诊断会基于这些结构化证据和 Runbook，而不是直接让大模型凭空生成结论。
+### Java 调 Python 超时
+
+检查后端配置：
+
+```yaml
+faultlab:
+  ai-service:
+    read-timeout-ms: ${AI_SERVICE_READ_TIMEOUT_MS:120000}
+```
+
+如果本地模型响应较慢，可以在启动 Java Backend 时显式设置：
+
+```text
+AI_SERVICE_READ_TIMEOUT_MS=120000
+```
+
+### DASHSCOPE_API_KEY 未配置
+
+PowerShell 中设置：
+
+```powershell
+setx DASHSCOPE_API_KEY "你的真实百炼APIKey"
+```
+
+重新打开 PowerShell，再启动 AI Service。
+
+临时当前窗口设置：
+
+```powershell
+$env:DASHSCOPE_API_KEY="你的真实百炼APIKey"
+```
+
+### PowerShell 中文乱码
+
+可以在当前窗口执行：
+
+```powershell
+chcp 65001
+```
+
+或者优先通过浏览器 Dashboard 查看中文内容。
+
+### 前端展示旧 AI 报告
+
+可能原因：
+
+- 当前 `experimentId` 没切换
+- 只刷新了页面，没有重新生成 AI 报告
+- 浏览器仍显示上一次查询结果
+
+处理方式：
+
+1. 确认当前 `experimentId`。
+2. 点击“刷新实验数据”。
+3. 再点击“生成 AI 诊断报告”。
+4. 调用 `GET /api/diagnosis/{experimentId}` 确认 `aiReportJson` 已更新。

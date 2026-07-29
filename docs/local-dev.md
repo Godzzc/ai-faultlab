@@ -1,14 +1,8 @@
 # Local Development
 
-本文档只记录本地开发环境的常用启动和排查命令。完整演示流程见 [demo-guide.md](./demo-guide.md)。
+本文档记录 AI FaultLab v0.3.0 的本地开发启动和排查命令。完整演示流程见 [demo-guide.md](./demo-guide.md)。
 
 ## Docker Compose
-
-首次准备环境变量：
-
-```bash
-cp deploy/.env.example deploy/.env
-```
 
 启动基础组件：
 
@@ -46,11 +40,11 @@ docker compose down -v
 区别：
 
 - `docker compose down`：删除容器和网络，保留 MySQL / Redis / RabbitMQ 数据卷。
-- `docker compose down -v`：同时删除数据卷，MySQL 会在下次启动时重新执行 `schema.sql` 初始化表结构。
+- `docker compose down -v`：同时删除数据卷。下次启动时 MySQL 会重新执行初始化脚本，适合 schema 变更后重建本地库。
 
-## Backend
+## Java Backend
 
-建议使用 IDEA 启动：
+推荐使用 IDEA 启动：
 
 ```text
 FaultLabBackendApplication
@@ -62,18 +56,65 @@ IDEA Environment variables 示例：
 MYSQL_HOST=localhost;MYSQL_PORT=3306;MYSQL_DATABASE=faultlab;MYSQL_USERNAME=faultlab;MYSQL_PASSWORD=faultlab123456;RABBITMQ_HOST=localhost;RABBITMQ_PORT=5672;RABBITMQ_USERNAME=faultlab;RABBITMQ_PASSWORD=faultlab123456;REDIS_HOST=localhost;REDIS_PORT=6379
 ```
 
+AI Service 相关配置在 `faultlab-backend/src/main/resources/application.yml` 中已有默认值：
+
+```yaml
+faultlab:
+  ai-service:
+    base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+    diagnosis-path: ${AI_SERVICE_DIAGNOSIS_PATH:/ai/diagnosis/generate}
+    connect-timeout-ms: ${AI_SERVICE_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${AI_SERVICE_READ_TIMEOUT_MS:120000}
+```
+
+`AI_SERVICE_READ_TIMEOUT_MS` 默认建议为 `120000`，避免本地 LLM 调用较慢时 Java 过早超时。
+
 健康检查：
 
 ```text
 GET http://localhost:8080/api/health
 ```
 
-也可以命令行启动：
+命令行启动：
 
 ```bash
 cd faultlab-backend
 mvn spring-boot:run
 ```
+
+## Python AI Service
+
+只需要配置 `DASHSCOPE_API_KEY`：
+
+```powershell
+setx DASHSCOPE_API_KEY "你的真实百炼APIKey"
+```
+
+重新打开 PowerShell 后启动：
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+如果还没有虚拟环境：
+
+```powershell
+cd faultlab-ai-service
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+`.venv` 不要提交到 Git。
+
+健康检查：
+
+```text
+GET http://localhost:8000/ai/health
+```
+
+未配置 `DASHSCOPE_API_KEY` 时，AI Service 会自动返回 fallback 报告。
 
 ## RabbitMQ Management
 
@@ -83,13 +124,13 @@ mvn spring-boot:run
 http://localhost:15672
 ```
 
-默认本地账号密码来自 `deploy/.env.example`：
+默认本地账号密码通常来自 `deploy/.env.example`：
 
 ```text
 faultlab / faultlab123456
 ```
 
-如果复制后的 `deploy/.env` 修改过账号密码，后端 IDEA 环境变量也需要同步修改。
+如果复制后的 `deploy/.env` 修改过账号密码，Java Backend 环境变量也需要同步。
 
 ## Frontend
 
@@ -98,7 +139,7 @@ faultlab / faultlab123456
 ```bash
 cd faultlab-frontend
 npm install
-npm run dev
+npm.cmd run dev
 ```
 
 访问：
@@ -107,13 +148,13 @@ npm run dev
 http://localhost:5173
 ```
 
-前端 Vite 已配置代理：
+Vite 代理：
 
 ```text
 /api -> http://localhost:8080
 ```
 
-如果 PowerShell 执行策略拦截 `npm`，可以使用：
+构建验证：
 
 ```bash
 npm.cmd run build
@@ -121,6 +162,7 @@ npm.cmd run build
 
 ## Notes
 
-- `deploy/.env` 不应提交到 Git。
-- MySQL 初始化脚本挂载自 `faultlab-backend/src/main/resources/db/schema.sql`，不要维护第二份 schema。
-- 修改 `schema.sql` 后，如果已有 MySQL volume，需要执行 `docker compose down -v` 后重新启动才会重新初始化。
+- 不要提交 `deploy/.env`、真实 API Key、`.env`、`.venv`。
+- MySQL 初始化脚本来自 `faultlab-backend/src/main/resources/db/schema.sql`。
+- 修改 schema 后，如果已有 MySQL volume，需要执行 `docker compose down -v` 后重新启动才会重建表结构。
+- Python AI Service 的模型、超时和路由配置目前在 `faultlab-ai-service/app/config.py` 中维护。

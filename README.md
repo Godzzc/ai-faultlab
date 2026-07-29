@@ -1,44 +1,51 @@
 # AI FaultLab
 
-AI FaultLab 是一个面向 Java 后端典型故障的故障演练与智能诊断平台。
+AI FaultLab 是一个面向 Java 后端故障排查场景的故障演练与智能诊断平台。
 
-它不是简单的 AI 外壳，而是围绕故障场景模拟、指标采集、Trace 链路追踪、规则诊断，以及后续 AI / Runbook RAG 扩展，形成一个可以演示的诊断闭环。
+它不是简单的大模型套壳，而是通过真实故障演练、指标采集、Trace 追踪、规则诊断、Evidence Package 和 LLM 诊断报告生成，形成一条可解释、可降级的诊断链路。
 
-## 当前已支持能力
-
-### MQ_BACKLOG：MQ 消息堆积
-
-- 通过 RabbitMQ 发送消息
-- 消费端延迟消费，模拟慢消费导致的堆积
-- 记录 `publishCount`、`consumeCount`、`avgConsumeMs`、`consumerDelayMs` 等指标
-- 支持规则诊断，输出 `evidence` 和 `suggestions`
-
-### THREAD_POOL_SATURATION：线程池饱和
-
-- 使用专用线程池，不影响 Spring Boot 其他异步任务
-- 异步提交长任务，模拟活跃线程打满、队列堆积、任务拒绝
-- 记录 `activeThreadCount`、`queueSize`、`rejectedTaskCount`、`avgTaskDurationMs` 等指标
-- 支持规则诊断
-
-### IDEMPOTENCY_CONFLICT：幂等冲突
-
-- 使用 Redis `SETNX` 模拟幂等检查快路径
-- 基于 `idempotencyKey` 和 `requestHash` 判断重复提交和参数冲突
-- 记录 `duplicateCount`、`hashMismatchCount`、`redisSetNxFailCount`、`redisErrorCount` 等指标
-- 支持规则诊断
-
-## 核心流程
+当前版本：
 
 ```text
-用户选择故障场景
-  -> 启动故障演练
-  -> 写入实验记录
-  -> 执行故障模拟
-  -> 采集指标
-  -> 写入 Trace
-  -> 执行规则诊断
-  -> 生成结构化诊断结果
-  -> 前端 Dashboard 展示
+v0.3.0: LLM Diagnosis Demo Version
+```
+
+当前能力边界：
+
+```text
+故障演练 + Trace + 规则诊断 + Evidence Package + ModelRouter + 百炼 LLM + 前端展示
+```
+
+## 当前核心能力
+
+- MQ 消息堆积演练
+- 线程池饱和演练
+- 幂等冲突演练
+- Metrics 指标采集
+- 自研轻量级 Trace
+- TraceContext 跨线程 / MQ Header 传播
+- 基于指标的规则诊断
+- Java 后端 Evidence Package 组装
+- Python AI Service 接入阿里云百炼 OpenAI 兼容接口
+- ModelRouter 基础模型路由
+- LLM JSON 解析校验
+- AI fallback 降级报告
+- Vue Dashboard 展示实验、指标、Trace、规则诊断和 AI 诊断报告
+
+## 完整诊断链路
+
+```text
+故障演练
+  -> Metrics / Trace
+  -> 规则诊断
+  -> Evidence Package
+  -> ModelRouter
+  -> Python AI Service
+  -> 百炼 LLM
+  -> JSON 校验
+  -> fallback
+  -> Java 落库
+  -> 前端展示
 ```
 
 ## 技术栈
@@ -46,12 +53,22 @@ AI FaultLab 是一个面向 Java 后端典型故障的故障演练与智能诊�
 后端：
 
 - Java 17
-- Spring Boot 3.x
+- Spring Boot 3
 - MyBatis-Plus
 - MySQL
 - Redis
 - RabbitMQ
-- JUnit5 / Mockito
+- JUnit5
+- Mockito
+
+AI Service：
+
+- Python
+- FastAPI
+- Pydantic
+- OpenAI SDK
+- 阿里云百炼
+- pytest
 
 前端：
 
@@ -69,30 +86,27 @@ AI FaultLab 是一个面向 Java 后端典型故障的故障演练与智能诊�
 
 ```text
 ai-faultlab
-├── faultlab-backend       # Spring Boot 后端主服务
+├── faultlab-backend       # Java Spring Boot 后端
+├── faultlab-ai-service    # Python FastAPI AI 诊断服务
 ├── faultlab-frontend      # Vue3 + Vite Dashboard
-├── faultlab-ai-service    # AI 诊断服务目录，当前仍是后续规划重点
-├── faultlab-runbook       # Runbook 文档目录
-├── faultlab-trace-sdk     # Trace SDK 目录
-├── deploy                 # Docker Compose 本地环境
+├── faultlab-runbook       # Runbook 文档目录，后续 RAG 使用
+├── faultlab-trace-sdk     # 轻量 Trace SDK
+├── deploy                 # Docker Compose 和部署文件
 ├── docs                   # 项目文档
-├── scripts                # 辅助脚本
 └── README.md
 ```
 
-## 本地启动方式
+## 本地启动
 
-### 1. 启动 Docker Compose
-
-建议在 WSL 中执行：
+### 1. 启动 MySQL / Redis / RabbitMQ
 
 ```bash
-cd /mnt/d/JavaProjects/ai-faultlab/deploy
+cd deploy
 docker compose up -d
 docker compose ps
 ```
 
-正常应看到以下容器启动：
+正常应看到：
 
 - `faultlab-mysql`
 - `faultlab-redis`
@@ -104,18 +118,26 @@ RabbitMQ 管理台：
 http://localhost:15672
 ```
 
-### 2. 启动后端
+### 2. 启动 Java Backend
 
-使用 IDEA 启动：
+推荐使用 IDEA 启动：
 
 ```text
 FaultLabBackendApplication
 ```
 
-建议配置 Environment variables：
+本地环境变量示例：
 
 ```text
 MYSQL_HOST=localhost;MYSQL_PORT=3306;MYSQL_DATABASE=faultlab;MYSQL_USERNAME=faultlab;MYSQL_PASSWORD=faultlab123456;RABBITMQ_HOST=localhost;RABBITMQ_PORT=5672;RABBITMQ_USERNAME=faultlab;RABBITMQ_PASSWORD=faultlab123456;REDIS_HOST=localhost;REDIS_PORT=6379
+```
+
+AI Service 连接配置已在 `faultlab-backend/src/main/resources/application.yml` 中提供默认值：
+
+```text
+AI_SERVICE_BASE_URL=http://localhost:8000
+AI_SERVICE_DIAGNOSIS_PATH=/ai/diagnosis/generate
+AI_SERVICE_READ_TIMEOUT_MS=120000
 ```
 
 健康检查：
@@ -124,12 +146,46 @@ MYSQL_HOST=localhost;MYSQL_PORT=3306;MYSQL_DATABASE=faultlab;MYSQL_USERNAME=faul
 GET http://localhost:8080/api/health
 ```
 
-### 3. 启动前端
+### 3. 配置 DASHSCOPE_API_KEY
+
+只有 `DASHSCOPE_API_KEY` 是必须配置的敏感环境变量。其他 LLM 运行参数在 `faultlab-ai-service/app/config.py` 中有代码默认值。
+
+PowerShell 示例：
+
+```powershell
+setx DASHSCOPE_API_KEY "你的真实百炼APIKey"
+```
+
+重新打开 PowerShell 后确认：
+
+```powershell
+echo $env:DASHSCOPE_API_KEY
+```
+
+不要提交真实 `.env`、API Key 或私有凭据。
+
+### 4. 启动 Python AI Service
+
+```bash
+cd faultlab-ai-service
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+健康检查：
+
+```text
+GET http://localhost:8000/ai/health
+```
+
+未配置 `DASHSCOPE_API_KEY` 时，AI Service 会自动返回 `fallback=true` 的降级报告，不会调用 LLM。
+
+### 5. 启动前端
 
 ```bash
 cd faultlab-frontend
 npm install
-npm run dev
+npm.cmd run dev
 ```
 
 访问：
@@ -138,48 +194,64 @@ npm run dev
 http://localhost:5173
 ```
 
-如果 PowerShell 执行策略拦截 `npm`，可以使用：
-
-```bash
-npm.cmd run build
-```
-
 ## 常用接口
 
-- `POST /api/experiments/start`：启动故障演练
-- `GET /api/experiments/{experimentId}`：查询实验详情
-- `GET /api/experiments/{experimentId}/metrics`：查询实验指标
-- `POST /api/diagnosis/{experimentId}/rule`：执行规则诊断
-- `GET /api/diagnosis/{experimentId}`：查询诊断报告
-- `GET /api/traces/{traceId}`：查询 Trace 树
+Java Backend：
 
-## 演示步骤
+- `GET /api/health`
+- `POST /api/experiments/start`
+- `GET /api/experiments/{experimentId}`
+- `GET /api/experiments/{experimentId}/metrics`
+- `GET /api/traces/{traceId}`
+- `POST /api/diagnosis/{experimentId}/rule`
+- `POST /api/diagnosis/{experimentId}/ai/generate`
+- `GET /api/diagnosis/{experimentId}`
 
-1. 打开前端 Dashboard：`http://localhost:5173`
-2. 选择 `MQ_BACKLOG`
-3. 使用默认参数，或设置 `messageCount=10`、`consumerDelayMs=1000`
-4. 点击“开始演练”
-5. 查看实验信息和指标列表
-6. 点击“执行规则诊断”
-7. 查看 `faultType`、`confidence`、`evidence`、`suggestions`
-8. 切换 `THREAD_POOL_SATURATION` 和 `IDEMPOTENCY_CONFLICT` 重复演示
-9. 说明 Trace 树当前已接入接口，但异步场景下 `TraceContext` 跨线程传播仍是后续 TODO
+Python AI Service：
 
-## 当前项目亮点
+- `GET /ai/health`
+- `POST /ai/diagnosis/generate`
 
-- 自研轻量级 Trace，基于 `traceId` / `spanId` / `parentSpanId` 记录关键调用节点
-- 基于 `@TraceSpan` + AOP 自动埋点，降低业务侵入
-- 支持三个 Java 后端典型故障场景演练
-- 基于指标的规则诊断，避免直接让 AI 凭空判断
-- Docker Compose 编排 MySQL、Redis、RabbitMQ，可本地一键启动
-- Vue Dashboard 支持故障演练闭环可视化展示
+## v0.3 演示流程
+
+1. 启动 Docker Compose。
+2. 启动 Java Backend。
+3. 设置 `DASHSCOPE_API_KEY`。
+4. 启动 Python AI Service。
+5. 启动 Vue 前端。
+6. 打开 Dashboard：`http://localhost:5173`。
+7. 选择 `MQ_BACKLOG`。
+8. 使用默认参数或设置 `messageCount=10`、`consumerDelayMs=1000`。
+9. 点击“开始演练”。
+10. 点击“执行规则诊断”。
+11. 点击“生成 AI 诊断报告”。
+12. 查看 Metrics、Trace 树、Rule Diagnosis 和 AI Report。
+13. 切换 `THREAD_POOL_SATURATION`、`IDEMPOTENCY_CONFLICT` 重复演示。
+
+## ModelRouter
+
+Python AI Service 当前包含基础模型路由能力。路由逻辑在 `faultlab-ai-service/app/model_router.py` 中：
+
+- `ruleResult` 缺失或未命中：使用 fast model
+- Trace 节点数较多：使用 reasoning model
+- 规则证据较丰富：使用 reasoning model
+- Metrics 数量较多：使用 long context model
+- 其他情况：使用 default model
+
+当前模型名称以 `faultlab-ai-service/app/config.py` 为准。调整模型时只修改该文件，不需要新增环境变量。
 
 ## 已知限制 / TODO
 
-- 当前 AI 诊断和 Runbook RAG 还未实现
-- 当前 `TraceContext` 跨线程 / MQ 消息传播还未完善
-- 当前前端是 MVP 单页，没有实验列表分页、自动轮询和图表
-- 当前规则诊断是第一版 Java 规则判断，后续可接入 AI 诊断报告生成
+当前还没有：
+
+- Runbook RAG
+- Milvus 向量检索
+- Tool Calling
+- LangGraph
+- MCP
+- Runbook 管理后台
+- 生产级鉴权
+- 完整监控告警
 
 ## License
 
