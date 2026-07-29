@@ -7,23 +7,18 @@ class Settings(BaseModel):
     service_name: str = "faultlab-ai-service"
     dashscope_api_key: str = ""
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    dashscope_model: str = "qwen-plus"
     llm_enabled: bool = True
-    llm_timeout_seconds: int = 20
-    llm_max_retries: int = 1
+    llm_timeout_seconds: int = 90
+    llm_max_retries: int = 0
+    llm_default_model: str = "qwen3.7-flash"
+    llm_fast_model: str = "qwen3.7-plus-2026-05-26"
+    llm_reasoning_model: str = "qwen3.7-plus"
+    llm_long_context_model: str = "qwen3.7-max"
 
 
 def load_settings() -> Settings:
     return Settings(
         dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""),
-        dashscope_base_url=os.getenv(
-            "DASHSCOPE_BASE_URL",
-            "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ),
-        dashscope_model=os.getenv("DASHSCOPE_MODEL", "qwen-plus"),
-        llm_enabled=os.getenv("LLM_ENABLED", "true").lower() == "true",
-        llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "20")),
-        llm_max_retries=int(os.getenv("LLM_MAX_RETRIES", "1")),
     )
 
 

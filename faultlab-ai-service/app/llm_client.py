@@ -11,9 +11,9 @@ class LlmClient:
             timeout=settings.llm_timeout_seconds,
         )
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str, model: str | None = None) -> str:
         response = self._client.chat.completions.create(
-            model=settings.dashscope_model,
+            model=model or settings.llm_default_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -6,6 +6,7 @@ Current scope:
 
 - Receive an Evidence Package from the Java backend.
 - Generate a structured diagnosis report with Alibaba Cloud Bailian through the OpenAI-compatible API.
+- Route diagnosis requests to a basic model tier based on evidence complexity.
 - Validate LLM JSON output into the fixed `DiagnosisResponse` schema.
 - Fall back to a rule-based template report when the LLM is disabled, unconfigured, unavailable, or returns invalid JSON.
 
@@ -20,18 +21,37 @@ Current scope:
 
 ## Configuration
 
-Set environment variables before starting the service:
+Only `DASHSCOPE_API_KEY` needs to be configured as an environment variable:
 
 ```bash
-DASHSCOPE_API_KEY=你的百炼APIKey
-DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-DASHSCOPE_MODEL=qwen-plus
-LLM_ENABLED=true
-LLM_TIMEOUT_SECONDS=20
-LLM_MAX_RETRIES=1
+DASHSCOPE_API_KEY=your-bailian-api-key
 ```
 
-If `DASHSCOPE_API_KEY` is empty, or `LLM_ENABLED=false`, the service automatically returns a fallback report and does not call the LLM.
+Other LLM settings use code defaults in `app/config.py`.
+
+Current defaults:
+
+- `dashscope_base_url`: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- `llm_timeout_seconds`: `90`
+- `llm_max_retries`: `0`
+- fast model: `qwen-turbo`
+- default model: `qwen-plus`
+- reasoning model: `qwen-plus`
+- long context model: `qwen-plus`
+
+If `DASHSCOPE_API_KEY` is empty, or `settings.llm_enabled` is `False`, the service automatically returns a fallback report and does not call the LLM.
+
+## Model Routing
+
+The service includes a basic `ModelRouter`:
+
+- Missing or unmatched `ruleResult`: fast model
+- Large Trace tree: reasoning model
+- Rich rule evidence: reasoning model
+- Many metrics: long context model
+- Normal diagnosis: default model
+
+Model selection is logged with the selected model and route reason. To adjust model names or runtime defaults, edit `app/config.py`.
 
 ## Install
 
@@ -71,10 +91,10 @@ The request body is the Evidence Package built by the Java backend. The response
 ## Not Included Yet
 
 - Runbook RAG
-- LangGraph
-- MCP
 - Vector retrieval
 - Tool Calling
+- LangGraph
+- MCP
 
 ## Test
 
