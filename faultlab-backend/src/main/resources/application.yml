@@ -28,6 +28,11 @@ mybatis-plus:
       id-type: auto
 
 faultlab:
+  ai-service:
+    base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+    diagnosis-path: ${AI_SERVICE_DIAGNOSIS_PATH:/ai/diagnosis/generate}
+    connect-timeout-ms: ${AI_SERVICE_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${AI_SERVICE_READ_TIMEOUT_MS:10000}
   mq-backlog:
     exchange: ${MQ_BACKLOG_EXCHANGE:faultlab.mq.backlog.exchange}
     queue: ${MQ_BACKLOG_QUEUE:faultlab.mq.backlog.queue}

@@ -1,6 +1,8 @@
 package com.faultlab.backend.diagnosis.controller;
 
 import com.faultlab.backend.common.ApiResponse;
+import com.faultlab.backend.diagnosis.ai.AiDiagnosisService;
+import com.faultlab.backend.diagnosis.ai.dto.AiDiagnosisResponse;
 import com.faultlab.backend.diagnosis.dto.DiagnosisReportResponse;
 import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.rule.dto.RuleDiagnosisResult;
@@ -17,10 +19,16 @@ public class DiagnosisController {
 
     private final RuleDiagnosisService ruleDiagnosisService;
     private final ExperimentQueryService experimentQueryService;
+    private final AiDiagnosisService aiDiagnosisService;
 
-    public DiagnosisController(RuleDiagnosisService ruleDiagnosisService, ExperimentQueryService experimentQueryService) {
+    public DiagnosisController(
+            RuleDiagnosisService ruleDiagnosisService,
+            ExperimentQueryService experimentQueryService,
+            AiDiagnosisService aiDiagnosisService
+    ) {
         this.ruleDiagnosisService = ruleDiagnosisService;
         this.experimentQueryService = experimentQueryService;
+        this.aiDiagnosisService = aiDiagnosisService;
     }
 
     @PostMapping("/{experimentId}/rule")
@@ -31,5 +39,10 @@ public class DiagnosisController {
     @GetMapping("/{experimentId}")
     public ApiResponse<DiagnosisReportResponse> getDiagnosisReport(@PathVariable String experimentId) {
         return ApiResponse.success(experimentQueryService.getDiagnosisReport(experimentId));
+    }
+
+    @PostMapping("/{experimentId}/ai/generate")
+    public ApiResponse<AiDiagnosisResponse> generateAiDiagnosis(@PathVariable String experimentId) {
+        return ApiResponse.success(aiDiagnosisService.generateAiDiagnosis(experimentId));
     }
 }
