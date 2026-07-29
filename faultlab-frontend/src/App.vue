@@ -54,14 +54,17 @@ const experiment = ref(null)
 const metrics = ref([])
 const diagnosisReport = ref(null)
 const ruleDiagnosis = ref(null)
+const aiDiagnosis = ref(null)
 const traceTree = ref(null)
 const currentExperimentId = ref('')
 const loading = reactive({
   start: false,
   refresh: false,
   diagnosis: false,
+  ai: false,
 })
 const errorMessage = ref('')
+const aiError = ref('')
 
 const selectedScenario = computed(() =>
   scenarios.find((scenario) => scenario.code === selectedScenarioCode.value) ?? scenarios[0],
@@ -117,6 +120,8 @@ async function startExperiment() {
     experiment.value = data
     currentExperimentId.value = data?.experimentId || ''
     ruleDiagnosis.value = null
+    aiDiagnosis.value = null
+    aiError.value = ''
     diagnosisReport.value = null
     metrics.value = []
     traceTree.value = null
@@ -130,7 +135,7 @@ async function startExperiment() {
 
 async function refreshExperimentData() {
   if (!currentExperimentId.value) {
-    errorMessage.value = '请先启动演练，或输入 experimentId'
+    errorMessage.value = '请先启动实验，或输入 experimentId'
     return
   }
   loading.refresh = true
@@ -145,6 +150,7 @@ async function refreshExperimentData() {
     metrics.value = Array.isArray(metricList) ? metricList : []
     diagnosisReport.value = report
     ruleDiagnosis.value = parseRuleDiagnosis(report?.ruleResultJson) ?? ruleDiagnosis.value
+    applyAiReport(report?.aiReportJson)
     await fetchTraceTree(detail?.traceId || experiment.value?.traceId)
   } catch (error) {
     errorMessage.value = error.message || '刷新实验数据失败'
@@ -155,7 +161,7 @@ async function refreshExperimentData() {
 
 async function runRuleDiagnosis() {
   if (!currentExperimentId.value) {
-    errorMessage.value = '请先启动演练，或输入 experimentId'
+    errorMessage.value = '请先启动实验，或输入 experimentId'
     return
   }
   loading.diagnosis = true
@@ -173,6 +179,26 @@ async function runRuleDiagnosis() {
   }
 }
 
+async function generateAiDiagnosis() {
+  if (!currentExperimentId.value) {
+    aiError.value = '请先启动实验'
+    return
+  }
+  loading.ai = true
+  aiError.value = ''
+  try {
+    aiDiagnosis.value = await requestJson(
+      `/api/diagnosis/${encodeURIComponent(currentExperimentId.value)}/ai/generate`,
+      { method: 'POST' },
+    )
+    await refreshExperimentData()
+  } catch (error) {
+    aiError.value = error.message || '生成 AI 诊断报告失败'
+  } finally {
+    loading.ai = false
+  }
+}
+
 function normalizedParams() {
   return Object.fromEntries(
     Object.entries(params).map(([key, value]) => [key, Number(value)]),
@@ -185,6 +211,30 @@ function parseRuleDiagnosis(ruleResultJson) {
     return JSON.parse(ruleResultJson)
   } catch {
     return null
+  }
+}
+
+function applyAiReport(aiReportJson) {
+  const parsed = parseAiDiagnosis(aiReportJson)
+  if (parsed === 'PARSE_ERROR') {
+    aiDiagnosis.value = null
+    aiError.value = 'AI 报告解析失败'
+    return
+  }
+  aiDiagnosis.value = parsed
+  if (parsed) {
+    aiError.value = ''
+  }
+}
+
+function parseAiDiagnosis(aiReportJson) {
+  if (!aiReportJson) return null
+  if (typeof aiReportJson === 'object') return aiReportJson
+  if (typeof aiReportJson !== 'string') return null
+  try {
+    return JSON.parse(aiReportJson)
+  } catch {
+    return 'PARSE_ERROR'
   }
 }
 
@@ -251,7 +301,7 @@ function formatBoolean(value) {
 
         <label class="field">
           <span>当前 experimentId</span>
-          <input v-model.trim="currentExperimentId" placeholder="启动后自动填充，也可手动输入" />
+          <input v-model.trim="currentExperimentId" placeholder="启动后自动填入，也可手动输入" />
         </label>
 
         <div class="actions">
@@ -260,6 +310,9 @@ function formatBoolean(value) {
           </button>
           <button type="button" :disabled="loading.diagnosis" @click="runRuleDiagnosis">
             {{ loading.diagnosis ? '诊断中...' : '执行规则诊断' }}
+          </button>
+          <button type="button" :disabled="loading.ai" @click="generateAiDiagnosis">
+            {{ loading.ai ? 'AI 诊断生成中...' : '生成 AI 诊断报告' }}
           </button>
           <button type="button" :disabled="loading.refresh" @click="refreshExperimentData">
             {{ loading.refresh ? '刷新中...' : '刷新实验数据' }}
@@ -347,6 +400,83 @@ function formatBoolean(value) {
           <p v-else class="empty">暂无数据</p>
         </section>
 
+        <section class="panel ai-panel">
+          <div class="section-heading">
+            <h2>AI 诊断报告</h2>
+            <span>{{ formatValue(aiDiagnosis?.confidence) }}</span>
+          </div>
+          <section v-if="aiError" class="alert ai-alert">
+            {{ aiError }}
+          </section>
+          <div v-if="aiDiagnosis" class="diagnosis ai-diagnosis">
+            <div v-if="aiDiagnosis.fallback === true" class="fallback-badge">
+              当前为降级报告
+            </div>
+            <div class="info-grid">
+              <div>
+                <span>faultType</span>
+                <strong>{{ formatValue(aiDiagnosis.faultType) }}</strong>
+              </div>
+              <div>
+                <span>faultName</span>
+                <strong>{{ formatValue(aiDiagnosis.faultName) }}</strong>
+              </div>
+              <div>
+                <span>confidence</span>
+                <strong>{{ formatValue(aiDiagnosis.confidence) }}</strong>
+              </div>
+              <div>
+                <span>fallback</span>
+                <strong>{{ formatBoolean(aiDiagnosis.fallback) }}</strong>
+              </div>
+            </div>
+            <p class="reason ai-summary">{{ formatValue(aiDiagnosis.summary) }}</p>
+            <div class="list-columns ai-list-grid">
+              <div>
+                <h3>Phenomenon</h3>
+                <ul v-if="aiDiagnosis.phenomenon?.length">
+                  <li v-for="item in aiDiagnosis.phenomenon" :key="item">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Evidence</h3>
+                <ul v-if="aiDiagnosis.evidence?.length">
+                  <li v-for="item in aiDiagnosis.evidence" :key="item">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Root Causes</h3>
+                <ul v-if="aiDiagnosis.rootCauses?.length">
+                  <li v-for="item in aiDiagnosis.rootCauses" :key="item">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Suggestions</h3>
+                <ul v-if="aiDiagnosis.suggestions?.length">
+                  <li v-for="item in aiDiagnosis.suggestions" :key="item">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Runbook References</h3>
+                <ul v-if="aiDiagnosis.runbookReferences?.length">
+                  <li
+                    v-for="item in aiDiagnosis.runbookReferences"
+                    :key="`${item.docId || ''}-${item.section || ''}-${item.title || ''}`"
+                  >
+                    {{ [item.docId, item.section, item.title].filter(Boolean).join(' / ') }}
+                  </li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+            </div>
+          </div>
+          <p v-else-if="!aiError" class="empty">暂无 AI 诊断报告</p>
+        </section>
+
         <section class="panel">
           <div class="section-heading">
             <h2>指标表格</h2>
@@ -391,4 +521,3 @@ function formatBoolean(value) {
     </section>
   </main>
 </template>
-
