@@ -1,6 +1,8 @@
 package com.faultlab.backend.diagnosis;
 
 import com.faultlab.backend.diagnosis.dto.DiagnosisReportResponse;
+import com.faultlab.backend.diagnosis.ai.AiDiagnosisService;
+import com.faultlab.backend.diagnosis.ai.dto.AiDiagnosisResponse;
 import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.rule.dto.RuleDiagnosisResult;
 import com.faultlab.backend.rule.service.RuleDiagnosisService;
@@ -29,6 +31,9 @@ class DiagnosisControllerTests {
 
     @MockBean
     private ExperimentQueryService experimentQueryService;
+
+    @MockBean
+    private AiDiagnosisService aiDiagnosisService;
 
     @Test
     void shouldReturnRuleDiagnosisWithApiResponse() throws Exception {
@@ -113,5 +118,31 @@ class DiagnosisControllerTests {
                 .andExpect(jsonPath("$.data.experimentId").value("exp-1"))
                 .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.MQ_BACKLOG))
                 .andExpect(jsonPath("$.data.ruleResultJson").value("{\"matched\":true}"));
+    }
+
+    @Test
+    void controllerShouldGenerateAiDiagnosis() throws Exception {
+        AiDiagnosisResponse response = new AiDiagnosisResponse(
+                "exp-1",
+                ScenarioCode.MQ_BACKLOG,
+                "MQ 消息堆积",
+                0.85,
+                "本次实验检测到 MQ 消息堆积风险。",
+                List.of(),
+                List.of("publishCount=10"),
+                List.of(),
+                List.of("增加消费者并发"),
+                List.of(),
+                false
+        );
+        when(aiDiagnosisService.generateAiDiagnosis("exp-1")).thenReturn(response);
+
+        mockMvc.perform(post("/api/diagnosis/exp-1/ai/generate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.experimentId").value("exp-1"))
+                .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.MQ_BACKLOG))
+                .andExpect(jsonPath("$.data.fallback").value(false));
     }
 }
