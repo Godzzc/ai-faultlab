@@ -5,6 +5,7 @@ from app.config import settings
 from app.fallback import build_fallback_report
 from app.json_parser import parse_and_validate_json
 from app.llm_client import LlmClient
+from app.model_router import ModelRouter
 from app.prompt_builder import PromptBuilder
 from app.schemas import DiagnosisRequest, DiagnosisResponse, TraceNode
 
@@ -15,17 +16,27 @@ def run_diagnosis_workflow(
     request: DiagnosisRequest,
     llm_client: LlmClient | None = None,
     prompt_builder: PromptBuilder | None = None,
+    model_router: ModelRouter | None = None,
 ) -> DiagnosisResponse:
     try:
         trace_summary = build_trace_summary(request)
         if not should_call_llm():
+            logger.info("fallback reason=llm_disabled_or_api_key_missing")
             return fallback_if_needed(request, build_fallback_report(request))
 
         system_prompt, user_prompt = build_prompt(request, trace_summary, prompt_builder)
-        response = call_llm_and_parse(request, system_prompt, user_prompt, llm_client)
+        route_result = select_model(request, trace_summary, model_router)
+        response = call_llm_and_parse(
+            request,
+            system_prompt,
+            user_prompt,
+            route_result.model,
+            llm_client,
+        )
         return fallback_if_needed(request, response)
     except Exception as exc:
         logger.exception("Diagnosis workflow failed: %s", exc)
+        logger.info("fallback reason=workflow_exception")
         return build_fallback_report(request)
 
 
@@ -64,6 +75,7 @@ def build_trace_summary(request: DiagnosisRequest) -> dict[str, Any]:
         "traceId": request.trace_tree.trace_id or request.experiment.trace_id,
         "rootSpanCount": len(roots),
         "spanCount": len(flattened_spans),
+        "nodeCount": len(flattened_spans),
         "slowSpans": slow_spans,
         "errorSpans": error_spans,
     }
@@ -86,10 +98,20 @@ def build_prompt(
     return builder.build(request, trace_summary)
 
 
+def select_model(
+    request: DiagnosisRequest,
+    trace_summary: dict[str, Any],
+    model_router: ModelRouter | None = None,
+) -> Any:
+    router = model_router or ModelRouter()
+    return router.select_model(request, trace_summary)
+
+
 def call_llm_and_parse(
     request: DiagnosisRequest,
     system_prompt: str,
     user_prompt: str,
+    model: str,
     llm_client: LlmClient | None = None,
 ) -> DiagnosisResponse:
     client = llm_client or LlmClient()
@@ -98,17 +120,18 @@ def call_llm_and_parse(
 
     for attempt in range(1, max_attempts + 1):
         try:
-            raw_content = call_llm(client, system_prompt, user_prompt)
+            raw_content = call_llm(client, system_prompt, user_prompt, model)
             return parse_and_validate_json(raw_content, request)
         except Exception as exc:
             last_error = exc
             logger.warning("LLM diagnosis attempt %s failed: %s", attempt, exc)
 
+    logger.info("fallback reason=llm_call_or_parse_failed")
     raise RuntimeError("LLM diagnosis failed after retries") from last_error
 
 
-def call_llm(client: LlmClient, system_prompt: str, user_prompt: str) -> str:
-    return client.generate(system_prompt, user_prompt)
+def call_llm(client: LlmClient, system_prompt: str, user_prompt: str, model: str) -> str:
+    return client.generate(system_prompt, user_prompt, model=model)
 
 
 def fallback_if_needed(
