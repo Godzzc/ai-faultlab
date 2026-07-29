@@ -5,11 +5,9 @@
 Current scope:
 
 - Receive an Evidence Package from the Java backend.
-- Generate a structured diagnosis report from `ruleResult`.
-- Return a template-based report for later Java integration, Runbook RAG, and LLM wiring.
-- Fall back to a safe report when evidence is insufficient or workflow execution fails.
-
-This stage only returns template-based AI diagnosis reports. It does not call a real model and does not perform vector retrieval.
+- Generate a structured diagnosis report with Alibaba Cloud Bailian through the OpenAI-compatible API.
+- Validate LLM JSON output into the fixed `DiagnosisResponse` schema.
+- Fall back to a rule-based template report when the LLM is disabled, unconfigured, unavailable, or returns invalid JSON.
 
 ## Requirements
 
@@ -18,6 +16,22 @@ This stage only returns template-based AI diagnosis reports. It does not call a 
 - Uvicorn
 - Pydantic
 - Pytest
+- OpenAI Python SDK
+
+## Configuration
+
+Set environment variables before starting the service:
+
+```bash
+DASHSCOPE_API_KEY=你的百炼APIKey
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_MODEL=qwen-plus
+LLM_ENABLED=true
+LLM_TIMEOUT_SECONDS=20
+LLM_MAX_RETRIES=1
+```
+
+If `DASHSCOPE_API_KEY` is empty, or `LLM_ENABLED=false`, the service automatically returns a fallback report and does not call the LLM.
 
 ## Install
 
@@ -56,13 +70,14 @@ The request body is the Evidence Package built by the Java backend. The response
 
 ## Not Included Yet
 
-- Real LLM calls
 - Runbook RAG
 - LangGraph
 - MCP
+- Vector retrieval
+- Tool Calling
 
 ## Test
 
 ```bash
-pytest
+python -m pytest
 ```
