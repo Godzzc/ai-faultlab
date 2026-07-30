@@ -253,6 +253,44 @@ Python AI Service 当前包含基础模型路由能力。路由逻辑在 `faultl
 - 生产级鉴权
 - 完整监控告警
 
+## Milvus Runbook Retrieval
+
+The local Docker Compose stack includes Milvus standalone:
+
+- `faultlab-milvus-etcd`
+- `faultlab-milvus-minio`
+- `faultlab-milvus-standalone`
+
+Start infrastructure:
+
+```bash
+cd deploy
+docker compose up -d
+docker compose ps
+```
+
+Milvus is exposed on:
+
+```text
+localhost:19530
+```
+
+Before using vector Runbook retrieval, configure `DASHSCOPE_API_KEY`, start `faultlab-ai-service`, and build the Runbook index:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+```
+
+The AI service embeds local Markdown Runbook chunks with Alibaba Cloud Bailian `text-embedding-v4` at dimension `1024`, writes them to Milvus collection `faultlab_runbook_chunks`, and uses `MilvusRunbookRetriever` during diagnosis. If Milvus retrieval fails or returns no chunks, the service falls back to `KeywordRunbookRetriever`.
+
+Common issues:
+
+- Milvus not started: `MilvusRunbookRetriever` fails and diagnosis falls back to keyword retrieval.
+- Collection missing: call `POST /ai/runbooks/index`.
+- Embedding timeout: retry indexing and check Bailian network/API availability.
+- `DASHSCOPE_API_KEY` missing: embedding and LLM calls cannot run; diagnosis uses fallback where applicable.
+- Vector dimension mismatch: confirm `settings.embedding_dimension` matches the Milvus collection schema, then recreate the collection if needed.
+
 ## License
 
 MIT
