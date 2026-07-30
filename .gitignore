@@ -108,6 +108,9 @@ tmp/
 temp/
 runtime/
 data/
+!faultlab-ai-service/data/
+faultlab-ai-service/data/runbook_index_state.json
+!faultlab-ai-service/data/.gitkeep
 
 # =========================
 # Docker Runtime Data

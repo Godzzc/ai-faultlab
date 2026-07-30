@@ -1,16 +1,19 @@
 from app.retrieval.base import BaseRunbookRetriever
+from app.retrieval.index_state_store import IndexStateStore
 from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever
 from app.retrieval.milvus_runbook_retriever import MilvusRunbookRetriever
 from app.retrieval.models import RunbookChunk, runbook_chunks_to_prompt_context, runbook_chunks_to_json
 from app.retrieval.retrieval_service import RetrievalService
-from app.retrieval.runbook_indexer import RunbookIndexer
+from app.retrieval.runbook_indexer import RunbookIndexer, RunbookIndexResult
 
 __all__ = [
     "BaseRunbookRetriever",
+    "IndexStateStore",
     "KeywordRunbookRetriever",
     "MilvusRunbookRetriever",
     "RetrievalService",
     "RunbookIndexer",
+    "RunbookIndexResult",
     "RunbookChunk",
     "runbook_chunks_to_prompt_context",
     "runbook_chunks_to_json",

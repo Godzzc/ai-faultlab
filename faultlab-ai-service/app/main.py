@@ -1,4 +1,7 @@
+from typing import Any
+
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 from app.config import settings
 from app.retrieval.runbook_indexer import RunbookIndexer
@@ -6,6 +9,10 @@ from app.schemas import DiagnosisRequest, DiagnosisResponse
 from app.workflow import run_diagnosis_workflow
 
 app = FastAPI(title=settings.service_name)
+
+
+class RunbookIndexRequest(BaseModel):
+    forceRebuild: bool = False
 
 
 @app.get("/ai/health")
@@ -22,14 +29,10 @@ def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisResponse:
 
 
 @app.post("/ai/runbooks/index")
-def index_runbooks() -> dict[str, int | str]:
+def index_runbooks(request: RunbookIndexRequest | None = None) -> dict[str, Any]:
     try:
-        indexed_count = RunbookIndexer().index_runbooks()
-        return {
-            "indexedCount": indexed_count,
-            "collectionName": settings.milvus_collection_name,
-            "status": "success",
-        }
+        force_rebuild = request.forceRebuild if request else False
+        return RunbookIndexer().index_runbooks(force_rebuild=force_rebuild).to_dict()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
