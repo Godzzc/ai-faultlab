@@ -1,12 +1,17 @@
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app import workflow
 from app.main import app
+from app.prompt_builder import PromptBuilder
+from app.runbook_retriever import RunbookChunk, RunbookRetriever
+from app.schemas import DiagnosisRequest
 
 
 client = TestClient(app)
+RUNBOOK_DIR = Path(__file__).resolve().parents[1] / "runbooks"
 
 
 class FakeLlmClient:
@@ -15,12 +20,15 @@ class FakeLlmClient:
         self.exception = exception
         self.calls = 0
         self.models = []
+        self.user_prompts = []
 
     def generate(self, system_prompt, user_prompt, model=None):
         self.calls += 1
         self.models.append(model)
+        self.user_prompts.append(user_prompt)
         assert "Evidence Package" in user_prompt
-        assert "严格 JSON" in system_prompt
+        assert "Runbook Context" in user_prompt
+        assert "strict JSON object" in system_prompt
         if self.exception:
             raise self.exception
         if self.outputs:
@@ -28,11 +36,24 @@ class FakeLlmClient:
         return ""
 
 
-def build_request(rule_result=None, metrics=None, roots=None):
+class RecordingRunbookRetriever:
+    def __init__(self, chunks=None, exception=None):
+        self.chunks = chunks if chunks is not None else [mq_chunk()]
+        self.exception = exception
+        self.calls = 0
+
+    def retrieve(self, request, trace_summary, top_k=3):
+        self.calls += 1
+        if self.exception:
+            raise self.exception
+        return self.chunks
+
+
+def build_request(rule_result=None, metrics=None, roots=None, scenario_code="MQ_BACKLOG"):
     payload = {
         "experiment": {
             "experimentId": "exp_xxx",
-            "scenarioCode": "MQ_BACKLOG",
+            "scenarioCode": scenario_code,
             "status": "RUNNING",
             "traceId": "trace_xxx",
         },
@@ -54,38 +75,55 @@ def build_request(rule_result=None, metrics=None, roots=None):
     return payload
 
 
-def matched_rule_result(evidence=None):
+def matched_rule_result(evidence=None, fault_type="MQ_BACKLOG"):
+    names = {
+        "MQ_BACKLOG": "MQ backlog",
+        "THREAD_POOL_SATURATION": "Thread pool saturation",
+        "IDEMPOTENCY_CONFLICT": "Idempotency conflict",
+    }
+    default_evidence = {
+        "MQ_BACKLOG": ["publishCount=10", "consumeCount=1", "avgConsumeMs=1500"],
+        "THREAD_POOL_SATURATION": ["activeThreadCount=16", "queueSize=20", "rejectedTaskCount=2"],
+        "IDEMPOTENCY_CONFLICT": ["duplicateCount=3", "hashMismatchCount=1", "redisSetNxFailCount=3"],
+    }
     return {
         "experimentId": "exp_xxx",
-        "faultType": "MQ_BACKLOG",
-        "faultName": "MQ 消息堆积",
+        "faultType": fault_type,
+        "faultName": names.get(fault_type, fault_type),
         "confidence": 0.85,
         "matched": True,
-        "reason": "生产消息数大于消费消息数，且消费耗时较高。",
-        "evidence": evidence if evidence is not None else [
-            "publishCount=10",
-            "consumeCount=1",
-        ],
-        "suggestions": [
-            "增加消费者并发",
-        ],
+        "reason": "Matched rule evidence for " + fault_type,
+        "evidence": evidence if evidence is not None else default_evidence.get(fault_type, []),
+        "suggestions": ["Follow the runbook and verify metrics."],
     }
 
 
-def llm_response(confidence=0.86):
+def llm_response(confidence=0.86, runbook_references=None):
     return {
         "experimentId": "exp_xxx",
         "faultType": "MQ_BACKLOG",
-        "faultName": "MQ 消息堆积",
+        "faultName": "MQ backlog",
         "confidence": confidence,
-        "summary": "LLM 基于证据判断存在 MQ 消息堆积风险。",
-        "phenomenon": ["消费数量明显低于生产数量"],
+        "summary": "LLM diagnosed MQ backlog from evidence.",
+        "phenomenon": ["consumeCount is lower than publishCount"],
         "evidence": ["publishCount=10", "consumeCount=1"],
-        "rootCauses": ["消费者处理速度不足"],
-        "suggestions": ["增加消费者并发"],
-        "runbookReferences": [],
+        "rootCauses": ["Consumer processing is slower than publishing."],
+        "suggestions": ["Increase consumer capacity."],
+        "runbookReferences": runbook_references if runbook_references is not None else [],
         "fallback": False,
     }
+
+
+def mq_chunk():
+    return RunbookChunk(
+        docId="mq-backlog",
+        title="MQ backlog runbook",
+        faultType="MQ_BACKLOG",
+        section="Core Metrics",
+        content="Check publishCount, consumeCount, backlogCount, and avgConsumeMs.",
+        keywords=["RabbitMQ", "publishCount", "consumeCount", "backlogCount"],
+        score=9.0,
+    )
 
 
 def enable_llm(monkeypatch, fake_client):
@@ -103,6 +141,10 @@ def disable_llm(monkeypatch):
 def clear_api_key(monkeypatch):
     monkeypatch.setattr(workflow.settings, "llm_enabled", True)
     monkeypatch.setattr(workflow.settings, "dashscope_api_key", "")
+
+
+def to_request(payload):
+    return DiagnosisRequest.model_validate(payload)
 
 
 def test_health_returns_up():
@@ -129,7 +171,7 @@ def test_generate_diagnosis_returns_fallback_when_llm_disabled(monkeypatch):
 
 def test_generate_diagnosis_does_not_call_llm_when_api_key_empty(monkeypatch):
     clear_api_key(monkeypatch)
-    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(), ensure_ascii=False)])
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
     monkeypatch.setattr(workflow, "LlmClient", lambda: fake_client)
 
     response = client.post(
@@ -143,7 +185,7 @@ def test_generate_diagnosis_does_not_call_llm_when_api_key_empty(monkeypatch):
 
 
 def test_generate_diagnosis_with_valid_llm_json_returns_non_fallback(monkeypatch):
-    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(), ensure_ascii=False)])
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
     enable_llm(monkeypatch, fake_client)
 
     response = client.post(
@@ -154,13 +196,13 @@ def test_generate_diagnosis_with_valid_llm_json_returns_non_fallback(monkeypatch
     assert response.status_code == 200
     body = response.json()
     assert body["fallback"] is False
-    assert body["summary"] == "LLM 基于证据判断存在 MQ 消息堆积风险。"
-    assert body["rootCauses"] == ["消费者处理速度不足"]
+    assert body["summary"] == "LLM diagnosed MQ backlog from evidence."
+    assert body["rootCauses"] == ["Consumer processing is slower than publishing."]
     assert fake_client.calls == 1
 
 
 def test_generate_diagnosis_parses_markdown_json_code_block(monkeypatch):
-    raw = "```json\n" + json.dumps(llm_response(), ensure_ascii=False) + "\n```"
+    raw = "```json\n" + json.dumps(llm_response()) + "\n```"
     fake_client = FakeLlmClient(outputs=[raw])
     enable_llm(monkeypatch, fake_client)
 
@@ -185,7 +227,7 @@ def test_generate_diagnosis_fallbacks_when_llm_returns_invalid_json(monkeypatch)
     assert response.status_code == 200
     body = response.json()
     assert body["fallback"] is True
-    assert body["evidence"] == ["publishCount=10", "consumeCount=1"]
+    assert body["evidence"] == ["publishCount=10", "consumeCount=1", "avgConsumeMs=1500"]
     assert fake_client.calls == 1
 
 
@@ -203,7 +245,7 @@ def test_generate_diagnosis_fallbacks_when_llm_raises(monkeypatch):
 
 
 def test_generate_diagnosis_clamps_confidence(monkeypatch):
-    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(confidence=1.8), ensure_ascii=False)])
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(confidence=1.8))])
     enable_llm(monkeypatch, fake_client)
 
     response = client.post(
@@ -228,8 +270,8 @@ def test_fallback_report_keeps_rule_evidence_and_suggestions(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["fallback"] is True
-    assert body["evidence"] == ["publishCount=10", "consumeCount=1"]
-    assert body["suggestions"] == ["增加消费者并发"]
+    assert body["evidence"] == ["publishCount=10", "consumeCount=1", "avgConsumeMs=1500"]
+    assert body["suggestions"] == ["Follow the runbook and verify metrics."]
 
 
 def test_generate_diagnosis_accepts_empty_metrics_and_trace_roots(monkeypatch):
@@ -247,7 +289,7 @@ def test_generate_diagnosis_accepts_empty_metrics_and_trace_roots(monkeypatch):
 
 
 def test_workflow_passes_model_router_selection_to_llm(monkeypatch):
-    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(), ensure_ascii=False)])
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
     enable_llm(monkeypatch, fake_client)
     metrics = [
         {
@@ -267,3 +309,156 @@ def test_workflow_passes_model_router_selection_to_llm(monkeypatch):
     assert response.status_code == 200
     assert response.json()["fallback"] is False
     assert fake_client.models == [workflow.settings.llm_long_context_model]
+
+
+def test_runbook_retriever_retrieves_mq_backlog_runbook():
+    retriever = RunbookRetriever(RUNBOOK_DIR)
+    request = to_request(build_request(rule_result=matched_rule_result(["publishCount", "avgConsumeMs"])))
+
+    chunks = retriever.retrieve(request, workflow.build_trace_summary(request))
+
+    assert chunks
+    assert all(chunk.faultType == "MQ_BACKLOG" for chunk in chunks)
+    assert chunks[0].docId == "mq-backlog"
+
+
+def test_runbook_retriever_retrieves_thread_pool_runbook():
+    retriever = RunbookRetriever(RUNBOOK_DIR)
+    request = to_request(build_request(
+        rule_result=matched_rule_result(fault_type="THREAD_POOL_SATURATION"),
+        scenario_code="THREAD_POOL_SATURATION",
+        metrics=[{"metricName": "activeThreadCount", "metricValue": "16", "metricUnit": "count", "component": "Executor"}],
+    ))
+
+    chunks = retriever.retrieve(request, workflow.build_trace_summary(request))
+
+    assert chunks
+    assert all(chunk.faultType == "THREAD_POOL_SATURATION" for chunk in chunks)
+    assert chunks[0].docId == "thread-pool-saturation"
+
+
+def test_runbook_retriever_retrieves_idempotency_runbook():
+    retriever = RunbookRetriever(RUNBOOK_DIR)
+    request = to_request(build_request(
+        rule_result=matched_rule_result(fault_type="IDEMPOTENCY_CONFLICT"),
+        scenario_code="IDEMPOTENCY_CONFLICT",
+        metrics=[{"metricName": "hashMismatchCount", "metricValue": "1", "metricUnit": "count", "component": "Redis"}],
+    ))
+
+    chunks = retriever.retrieve(request, workflow.build_trace_summary(request))
+
+    assert chunks
+    assert all(chunk.faultType == "IDEMPOTENCY_CONFLICT" for chunk in chunks)
+    assert chunks[0].docId == "idempotency-conflict"
+
+
+def test_runbook_retriever_does_not_return_unmatched_fault_type():
+    retriever = RunbookRetriever(RUNBOOK_DIR)
+    request = to_request(build_request(
+        rule_result=matched_rule_result(
+            evidence=["publishCount=10", "consumeCount=1"],
+            fault_type="THREAD_POOL_SATURATION",
+        ),
+        scenario_code="THREAD_POOL_SATURATION",
+    ))
+
+    chunks = retriever.retrieve(request, workflow.build_trace_summary(request))
+
+    assert all(chunk.docId != "mq-backlog" for chunk in chunks)
+
+
+def test_runbook_retriever_missing_directory_returns_empty(tmp_path):
+    retriever = RunbookRetriever(tmp_path / "missing-runbooks")
+    request = to_request(build_request(rule_result=matched_rule_result()))
+
+    chunks = retriever.retrieve(request, workflow.build_trace_summary(request))
+
+    assert chunks == []
+
+
+def test_prompt_builder_injects_runbook_context():
+    request = to_request(build_request(rule_result=matched_rule_result()))
+
+    _, user_prompt = PromptBuilder().build(request, workflow.build_trace_summary(request), [mq_chunk()])
+
+    assert "Runbook Context" in user_prompt
+    assert "mq-backlog" in user_prompt
+    assert "Core Metrics" in user_prompt
+
+
+def test_workflow_retrieves_runbook_before_llm(monkeypatch):
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
+    retriever = RecordingRunbookRetriever()
+    enable_llm(monkeypatch, fake_client)
+
+    response = workflow.run_diagnosis_workflow(
+        to_request(build_request(rule_result=matched_rule_result())),
+        runbook_retriever=retriever,
+    )
+
+    assert response.fallback is False
+    assert retriever.calls == 1
+    assert fake_client.calls == 1
+    assert "mq-backlog" in fake_client.user_prompts[0]
+
+
+def test_llm_valid_runbook_reference_is_retained(monkeypatch):
+    references = [{"docId": "mq-backlog", "title": "fabricated title", "section": "Core Metrics"}]
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(runbook_references=references))])
+    retriever = RecordingRunbookRetriever(chunks=[mq_chunk()])
+    enable_llm(monkeypatch, fake_client)
+
+    response = workflow.run_diagnosis_workflow(
+        to_request(build_request(rule_result=matched_rule_result())),
+        runbook_retriever=retriever,
+    )
+
+    assert response.fallback is False
+    assert len(response.runbook_references) == 1
+    assert response.runbook_references[0].doc_id == "mq-backlog"
+    assert response.runbook_references[0].title == "MQ backlog runbook"
+    assert response.runbook_references[0].section == "Core Metrics"
+
+
+def test_llm_invalid_runbook_reference_is_filtered(monkeypatch):
+    references = [{"docId": "missing-doc", "title": "Missing", "section": "Nope"}]
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(runbook_references=references))])
+    retriever = RecordingRunbookRetriever(chunks=[mq_chunk()])
+    enable_llm(monkeypatch, fake_client)
+
+    response = workflow.run_diagnosis_workflow(
+        to_request(build_request(rule_result=matched_rule_result())),
+        runbook_retriever=retriever,
+    )
+
+    assert response.fallback is False
+    assert response.runbook_references == []
+
+
+def test_empty_runbook_context_still_allows_llm_diagnosis(monkeypatch):
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
+    retriever = RecordingRunbookRetriever(chunks=[])
+    enable_llm(monkeypatch, fake_client)
+
+    response = workflow.run_diagnosis_workflow(
+        to_request(build_request(rule_result=matched_rule_result())),
+        runbook_retriever=retriever,
+    )
+
+    assert response.fallback is False
+    assert response.runbook_references == []
+    assert "Runbook Context:\n[]" in fake_client.user_prompts[0]
+
+
+def test_runbook_retrieval_failure_does_not_cause_500(monkeypatch):
+    fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
+    retriever = RecordingRunbookRetriever(exception=RuntimeError("runbook read failed"))
+    enable_llm(monkeypatch, fake_client)
+
+    response = workflow.run_diagnosis_workflow(
+        to_request(build_request(rule_result=matched_rule_result())),
+        runbook_retriever=retriever,
+    )
+
+    assert response.fallback is False
+    assert fake_client.calls == 1

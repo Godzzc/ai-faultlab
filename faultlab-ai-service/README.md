@@ -1,29 +1,67 @@
 # faultlab-ai-service
 
-`faultlab-ai-service` 是 AI FaultLab 的 Python FastAPI AI 诊断服务。
+`faultlab-ai-service` is the Python FastAPI AI diagnosis service for AI FaultLab.
 
-当前服务已经接入阿里云百炼 OpenAI 兼容接口，用于基于 Java 后端传入的 Evidence Package 生成结构化 AI 诊断报告。
+The service receives an Evidence Package from the Java backend, builds a constrained diagnosis prompt, retrieves local Runbook context, calls the Alibaba Cloud Bailian OpenAI-compatible API, validates strict JSON output, and falls back to rule-based diagnosis when LLM diagnosis is unavailable.
 
-## 当前能力
+## Current Capabilities
 
-- 接收 Evidence Package
-- 构造受证据约束的 LLM Prompt
-- 调用阿里云百炼 OpenAI 兼容接口
-- 支持基础 ModelRouter
-- 解析和校验 LLM 输出 JSON
-- 补齐缺失字段并限制 `confidence` 到 `0..1`
-- LLM 不可用、超时、空响应、JSON 非法时自动 fallback
-- 未配置 `DASHSCOPE_API_KEY` 时自动 fallback，不调用 LLM
+- Receives Evidence Package input.
+- Builds evidence-constrained LLM prompts.
+- Supports Runbook RAG Basic with local Markdown runbooks.
+- Retrieves runbooks by faultType filtering plus simple keyword scoring.
+- Injects retrieved Runbook Context into the diagnosis prompt.
+- Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
+- Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
+- Supports basic `ModelRouter` model selection.
+- Parses and validates LLM JSON output.
+- Fills missing fields and clamps `confidence` to `0..1`.
+- Falls back automatically when LLM is disabled, API key is missing, LLM errors, response is empty, or JSON is invalid.
 
-## 配置
+## Runbook RAG Basic
 
-当前只有 `DASHSCOPE_API_KEY` 需要作为环境变量配置：
+Runbook RAG Basic uses Markdown files from `runbooks/`.
+
+Each runbook should include YAML-style front matter:
+
+```markdown
+---
+docId: mq-backlog
+title: MQ backlog runbook
+faultType: MQ_BACKLOG
+keywords: RabbitMQ, publishCount, consumeCount, backlogCount
+---
+```
+
+The retriever:
+
+- Reads local Markdown files only.
+- Parses `docId`, `title`, `faultType`, and `keywords`.
+- Splits content by second-level headings (`##`) into sections.
+- Applies strong filtering by `ruleResult.faultType` or `experiment.scenarioCode`.
+- Extracts keywords from rule reason, rule evidence, metrics, and trace summary.
+- Scores title, section, content, and runbook keywords with simple keyword matching.
+- Returns the top matching chunks.
+
+This version does not depend on a vector database or agent framework. It does not include Milvus, FAISS, Elasticsearch, LangChain, LangGraph, MCP, or Tool Calling.
+
+Future upgrades can add:
+
+- chunk embedding
+- vector retrieval
+- BM25
+- rerank
+- Runbook management UI
+
+## Configuration
+
+Only `DASHSCOPE_API_KEY` is required as an environment variable:
 
 ```bash
 DASHSCOPE_API_KEY=your-bailian-api-key
 ```
 
-其他 LLM 配置使用 `app/config.py` 中的代码默认值，包括：
+Other LLM settings use defaults in `app/config.py`, including:
 
 - `dashscope_base_url`
 - `llm_enabled`
@@ -34,19 +72,17 @@ DASHSCOPE_API_KEY=your-bailian-api-key
 - `llm_reasoning_model`
 - `llm_long_context_model`
 
-模型名称以 `app/config.py` 当前值为准。后续如果需要调整模型，直接修改该文件即可。
-
 ## ModelRouter
 
-`ModelRouter` 根据诊断证据复杂度选择模型：
+`ModelRouter` chooses a model based on diagnosis complexity:
 
-- `ruleResult` 缺失或 `matched=false`：fast model
-- Trace 节点数较多：reasoning model
-- 规则证据数量较多：reasoning model
-- Metrics 数量较多：long context model
-- 普通诊断：default model
+- missing `ruleResult` or `matched=false`: fast model
+- large trace tree: reasoning model
+- rich rule evidence: reasoning model
+- many metrics: long-context model
+- default diagnosis: default model
 
-模型选择结果只记录到服务日志，不修改对外响应结构。
+The selected model is logged only. It does not change the external API response structure.
 
 ## Install
 
@@ -81,22 +117,22 @@ Response:
 POST http://localhost:8000/ai/diagnosis/generate
 ```
 
-请求体是 Java 后端组装的 Evidence Package，包含：
+The request body is the Evidence Package assembled by the Java backend:
 
 - `experiment`
 - `metrics`
 - `traceTree`
 - `ruleResult`
 
-响应是固定结构的 `DiagnosisResponse`：
+The response is a fixed `DiagnosisResponse`:
 
 ```json
 {
   "experimentId": "exp_xxx",
   "faultType": "MQ_BACKLOG",
-  "faultName": "MQ 消息堆积",
+  "faultName": "MQ backlog",
   "confidence": 0.85,
-  "summary": "本次实验检测到 MQ 消息堆积风险。",
+  "summary": "The evidence indicates an MQ backlog risk.",
   "phenomenon": [],
   "evidence": [],
   "rootCauses": [],
@@ -108,24 +144,36 @@ POST http://localhost:8000/ai/diagnosis/generate
 
 ## Fallback
 
-以下情况会自动返回降级报告：
+Fallback returns a displayable rule-based report when:
 
-- 未配置 `DASHSCOPE_API_KEY`
+- `DASHSCOPE_API_KEY` is not configured
 - `settings.llm_enabled=False`
-- LLM 调用超时或异常
-- LLM 返回空内容
-- LLM 返回非 JSON
-- JSON 结构不符合预期
+- LLM call times out or raises
+- LLM returns empty content
+- LLM returns non-JSON content
+- JSON structure is invalid
 
-降级报告会尽量保留 `ruleResult.evidence` 和 `ruleResult.suggestions`，方便前端继续展示。
+Fallback reports keep `ruleResult.evidence` and `ruleResult.suggestions` when available.
 
-## Not Included Yet
+## Local Verification
 
-- Runbook RAG
-- LangGraph
-- MCP
-- 向量库
-- Tool Calling
+1. Confirm `DASHSCOPE_API_KEY` is configured.
+2. Start the service:
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+3. Call:
+
+```text
+POST http://localhost:8000/ai/diagnosis/generate
+```
+
+4. Use an `MQ_BACKLOG` Evidence Package.
+5. Verify `fallback=false` when the LLM call succeeds.
+6. Verify `runbookReferences` contains only valid retrieved references, or at least confirm logs show retrieved Runbook chunks.
+7. Check Uvicorn logs for Runbook retrieval count plus `docId`, `section`, and `score`.
 
 ## Test
 
