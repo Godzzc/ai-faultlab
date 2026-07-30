@@ -7,7 +7,8 @@ from app.json_parser import parse_and_validate_json
 from app.llm_client import LlmClient
 from app.model_router import ModelRouter
 from app.prompt_builder import PromptBuilder
-from app.runbook_retriever import RunbookChunk, RunbookRetriever
+from app.retrieval.models import RunbookChunk
+from app.retrieval.retrieval_service import RetrievalService
 from app.schemas import DiagnosisRequest, DiagnosisResponse, RunbookReference, TraceNode
 
 logger = logging.getLogger(__name__)
@@ -18,11 +19,11 @@ def run_diagnosis_workflow(
     llm_client: LlmClient | None = None,
     prompt_builder: PromptBuilder | None = None,
     model_router: ModelRouter | None = None,
-    runbook_retriever: RunbookRetriever | None = None,
+    retrieval_service: RetrievalService | None = None,
 ) -> DiagnosisResponse:
     try:
         trace_summary = build_trace_summary(request)
-        runbook_chunks = retrieve_runbook(request, trace_summary, runbook_retriever)
+        runbook_chunks = retrieve_runbook(request, trace_summary, retrieval_service)
         if not should_call_llm():
             logger.info("fallback reason=llm_disabled_or_api_key_missing")
             return fallback_if_needed(request, build_fallback_report(request))
@@ -106,14 +107,10 @@ def build_prompt(
 def retrieve_runbook(
     request: DiagnosisRequest,
     trace_summary: dict[str, Any],
-    runbook_retriever: RunbookRetriever | None = None,
+    retrieval_service: RetrievalService | None = None,
 ) -> list[RunbookChunk]:
-    try:
-        retriever = runbook_retriever or RunbookRetriever()
-        return retriever.retrieve(request, trace_summary)
-    except Exception as exc:
-        logger.warning("Runbook retrieval failed: %s", exc)
-        return []
+    service = retrieval_service or RetrievalService()
+    return service.retrieve_runbooks(request, trace_summary)
 
 
 def select_model(

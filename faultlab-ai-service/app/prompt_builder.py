@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from app.runbook_retriever import RunbookChunk, runbook_chunks_to_prompt_context
+from app.retrieval.models import RunbookChunk, runbook_chunks_to_prompt_context
 from app.schemas import DiagnosisRequest
 
 
