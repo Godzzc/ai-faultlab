@@ -2,7 +2,7 @@
 
 `faultlab-ai-service` is the Python FastAPI AI diagnosis service for AI FaultLab.
 
-The service receives an Evidence Package from the Java backend, builds a constrained diagnosis prompt, retrieves local Runbook context, calls the Alibaba Cloud Bailian OpenAI-compatible API, validates strict JSON output, and falls back to rule-based diagnosis when LLM diagnosis is unavailable.
+The service receives an Evidence Package from the Java backend, builds a constrained diagnosis prompt, retrieves Runbook context, calls the Alibaba Cloud Bailian OpenAI-compatible API, validates strict JSON output, and falls back to rule-based diagnosis when LLM diagnosis is unavailable.
 
 ## Current Capabilities
 
@@ -10,7 +10,9 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Builds evidence-constrained LLM prompts.
 - Supports Runbook RAG Basic with local Markdown runbooks.
 - Uses an abstract retrieval layer for Runbook retrieval.
-- Retrieves runbooks by faultType filtering plus simple keyword scoring.
+- Supports Milvus Vector Retrieval for Runbook chunks.
+- Uses Alibaba Cloud Bailian `text-embedding-v4` for Runbook embeddings.
+- Falls back to `KeywordRunbookRetriever` when Milvus retrieval fails or returns no chunks.
 - Injects retrieved Runbook Context into the diagnosis prompt.
 - Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
@@ -19,9 +21,9 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Fills missing fields and clamps `confidence` to `0..1`.
 - Falls back automatically when LLM is disabled, API key is missing, LLM errors, response is empty, or JSON is invalid.
 
-## Runbook RAG Basic
+## Runbook RAG
 
-Runbook RAG Basic uses Markdown files from `runbooks/`.
+Runbook RAG uses Markdown files from `runbooks/`. The files are split into section chunks, embedded with Alibaba Cloud Bailian `text-embedding-v4`, and stored in Milvus.
 
 Each runbook should include YAML-style front matter:
 
@@ -37,13 +39,22 @@ keywords: RabbitMQ, publishCount, consumeCount, backlogCount
 The retrieval layer is organized around:
 
 - `BaseRunbookRetriever`: shared retriever interface.
-- `KeywordRunbookRetriever`: current default implementation.
+- `MilvusRunbookRetriever`: current primary retriever.
+- `KeywordRunbookRetriever`: local Markdown fallback retriever.
 - `RetrievalService`: workflow-facing entry point.
 - `RunbookChunk`: shared retrieval result model.
 
-`RetrievalService` currently delegates to `KeywordRunbookRetriever`. The workflow depends on `RetrievalService`, so a later `MilvusRunbookRetriever` can be added behind the same service boundary without changing the main diagnosis flow.
+`RetrievalService` first tries `MilvusRunbookRetriever`. If Milvus is unavailable, the collection is missing, embedding generation fails, or Milvus returns no chunks, it falls back to `KeywordRunbookRetriever`.
 
-The current keyword retriever:
+The Milvus retriever:
+
+- Embeds the query with `text-embedding-v4`.
+- Uses embedding dimension `1024`.
+- Searches collection `faultlab_runbook_chunks`.
+- Applies faultType filtering.
+- Returns `RunbookChunk` objects to the existing prompt builder.
+
+The fallback keyword retriever:
 
 - Reads local Markdown files only.
 - Parses `docId`, `title`, `faultType`, and `keywords`.
@@ -53,13 +64,11 @@ The current keyword retriever:
 - Scores title, section, content, and runbook keywords with simple keyword matching.
 - Returns the top matching chunks.
 
-This version does not depend on a vector database or agent framework. It does not include Milvus, FAISS, Elasticsearch, Hybrid Retrieval, Rerank, LangChain, LangGraph, MCP, or Tool Calling.
+This version is vector retrieval with keyword fallback. It is not Hybrid Retrieval and does not include Rerank, FAISS, Elasticsearch, LangChain, LangGraph, MCP, or Tool Calling.
 
 Future upgrades can add:
 
-- chunk embedding
-- vector retrieval
-- `MilvusRunbookRetriever`
+- Hybrid Retrieval
 - BM25
 - rerank
 - Runbook management UI
@@ -82,6 +91,34 @@ Other LLM settings use defaults in `app/config.py`, including:
 - `llm_fast_model`
 - `llm_reasoning_model`
 - `llm_long_context_model`
+- `embedding_model`
+- `embedding_dimension`
+- `milvus_host`
+- `milvus_port`
+- `milvus_collection_name`
+- `retrieval_mode`
+
+Only `DASHSCOPE_API_KEY` is read from the environment. Milvus and embedding settings currently use code defaults in `app/config.py`.
+
+## Runbook Indexing
+
+Start Milvus from Docker Compose, then index local runbooks:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+```
+
+Response:
+
+```json
+{
+  "indexedCount": 12,
+  "collectionName": "faultlab_runbook_chunks",
+  "status": "success"
+}
+```
+
+Indexing is explicit. The service does not index runbooks during startup.
 
 ## ModelRouter
 
@@ -166,26 +203,41 @@ Fallback returns a displayable rule-based report when:
 
 Fallback reports keep `ruleResult.evidence` and `ruleResult.suggestions` when available.
 
+Runbook retrieval fallback is separate from diagnosis fallback. If Milvus retrieval fails, diagnosis continues with `KeywordRunbookRetriever`.
+
 ## Local Verification
 
 1. Confirm `DASHSCOPE_API_KEY` is configured.
-2. Start the service:
+2. Start Docker Compose from `deploy/`:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+3. Start the service:
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-3. Call:
+4. Build the Runbook index:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+```
+
+5. Call:
 
 ```text
 POST http://localhost:8000/ai/diagnosis/generate
 ```
 
-4. Use an `MQ_BACKLOG` Evidence Package.
-5. Verify `fallback=false` when the LLM call succeeds.
-6. Verify logs show `RetrievalService` retrieving Runbook chunks.
-7. Verify `runbookReferences` contains only valid retrieved references, or at least confirm logs show retrieved Runbook chunks.
-8. Check Uvicorn logs for retriever type, retrieval count, `docId`, `section`, and `score`.
+6. Use an `MQ_BACKLOG` Evidence Package.
+7. Verify `fallback=false` when the LLM call succeeds.
+8. Verify logs show `MilvusRunbookRetriever` retrieving Runbook chunks.
+9. Verify `runbookReferences` contains only valid retrieved references.
+10. Stop Milvus and call diagnosis again to verify fallback to `KeywordRunbookRetriever`.
 
 ## Test
 

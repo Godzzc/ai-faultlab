@@ -160,6 +160,54 @@ Vite 代理：
 npm.cmd run build
 ```
 
+## Milvus Runbook Index
+
+Docker Compose starts Milvus standalone together with MySQL, Redis, and RabbitMQ:
+
+- `faultlab-milvus-etcd`
+- `faultlab-milvus-minio`
+- `faultlab-milvus-standalone`
+
+Start and verify:
+
+```bash
+cd deploy
+docker compose up -d
+docker compose ps
+```
+
+Milvus listens on:
+
+```text
+localhost:19530
+```
+
+After setting `DASHSCOPE_API_KEY` and starting the Python AI Service, build the Runbook vector index:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+```
+
+Expected response:
+
+```json
+{
+  "indexedCount": 12,
+  "collectionName": "faultlab_runbook_chunks",
+  "status": "success"
+}
+```
+
+Diagnosis retrieval tries `MilvusRunbookRetriever` first. If Milvus is unavailable, the collection does not exist, embedding fails, or vector search returns no chunks, `RetrievalService` falls back to `KeywordRunbookRetriever`.
+
+Common issues:
+
+- Milvus not started: run `docker compose ps` and check `docker compose logs -f milvus-standalone`.
+- Collection missing: call `POST /ai/runbooks/index`.
+- Embedding timeout: verify `DASHSCOPE_API_KEY` and network access to Bailian.
+- `DASHSCOPE_API_KEY` missing: indexing fails and LLM diagnosis will use fallback.
+- Vector dimension mismatch: recreate the Milvus collection after changing `embedding_dimension`.
+
 ## Notes
 
 - 不要提交 `deploy/.env`、真实 API Key、`.env`、`.venv`。

@@ -8,6 +8,7 @@ from app.main import app
 from app.prompt_builder import PromptBuilder
 from app.retrieval.base import BaseRunbookRetriever
 from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever
+from app.retrieval.milvus_runbook_retriever import MilvusRunbookRetriever
 from app.retrieval.models import RunbookChunk
 from app.retrieval.retrieval_service import RetrievalService
 from app.schemas import DiagnosisRequest
@@ -399,16 +400,55 @@ def test_keyword_runbook_retriever_missing_directory_returns_empty(tmp_path):
 def test_retrieval_service_uses_keyword_runbook_retriever_by_default():
     service = RetrievalService()
 
-    assert isinstance(service.retriever, KeywordRunbookRetriever)
+    assert isinstance(service.primary_retriever, MilvusRunbookRetriever)
+    assert isinstance(service.fallback_retriever, KeywordRunbookRetriever)
 
 
 def test_retrieval_service_returns_empty_when_retriever_raises():
-    service = RetrievalService(RecordingRunbookRetriever(exception=RuntimeError("retrieval failed")))
+    service = RetrievalService(
+        primary_retriever=RecordingRunbookRetriever(exception=RuntimeError("retrieval failed")),
+        fallback_retriever=RecordingRunbookRetriever(chunks=[]),
+    )
     request = to_request(build_request(rule_result=matched_rule_result()))
 
     chunks = service.retrieve_runbooks(request, workflow.build_trace_summary(request))
 
     assert chunks == []
+
+
+def test_retrieval_service_prefers_primary_retriever():
+    primary = RecordingRunbookRetriever(chunks=[mq_chunk()])
+    fallback = RecordingRunbookRetriever(chunks=[
+        RunbookChunk(
+            docId="fallback",
+            title="Fallback",
+            faultType="MQ_BACKLOG",
+            section="Fallback",
+            content="Fallback",
+            keywords=[],
+        )
+    ])
+    service = RetrievalService(primary_retriever=primary, fallback_retriever=fallback)
+    request = to_request(build_request(rule_result=matched_rule_result()))
+
+    chunks = service.retrieve_runbooks(request, workflow.build_trace_summary(request))
+
+    assert chunks == [mq_chunk()]
+    assert primary.calls == 1
+    assert fallback.calls == 0
+
+
+def test_retrieval_service_fallbacks_when_primary_returns_empty():
+    primary = RecordingRunbookRetriever(chunks=[])
+    fallback = RecordingRunbookRetriever(chunks=[mq_chunk()])
+    service = RetrievalService(primary_retriever=primary, fallback_retriever=fallback)
+    request = to_request(build_request(rule_result=matched_rule_result()))
+
+    chunks = service.retrieve_runbooks(request, workflow.build_trace_summary(request))
+
+    assert chunks == [mq_chunk()]
+    assert primary.calls == 1
+    assert fallback.calls == 1
 
 
 def test_prompt_builder_injects_runbook_context():
@@ -488,7 +528,8 @@ def test_empty_runbook_context_still_allows_llm_diagnosis(monkeypatch):
 def test_runbook_retrieval_failure_does_not_cause_500(monkeypatch):
     fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
     retrieval_service = RetrievalService(
-        RecordingRunbookRetriever(exception=RuntimeError("runbook read failed"))
+        primary_retriever=RecordingRunbookRetriever(exception=RuntimeError("runbook read failed")),
+        fallback_retriever=RecordingRunbookRetriever(chunks=[mq_chunk()]),
     )
     enable_llm(monkeypatch, fake_client)
 

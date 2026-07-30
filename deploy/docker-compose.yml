@@ -64,6 +64,67 @@ services:
       timeout: 5s
       retries: 10
 
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    container_name: faultlab-milvus-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command:
+      - etcd
+      - -advertise-client-urls=http://127.0.0.1:2379
+      - -listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - milvus-etcd-data:/etcd
+    networks:
+      - faultlab-network
+
+  milvus-minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: faultlab-milvus-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MILVUS_MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MILVUS_MINIO_SECRET_KEY:-minioadmin}
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "${MILVUS_MINIO_API_PORT:-9000}:9000"
+      - "${MILVUS_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - milvus-minio-data:/minio_data
+    networks:
+      - faultlab-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus-standalone:
+    image: milvusdb/milvus:v2.4.15
+    container_name: faultlab-milvus-standalone
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+      MINIO_ACCESS_KEY_ID: ${MILVUS_MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${MILVUS_MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    networks:
+      - faultlab-network
+    depends_on:
+      - milvus-etcd
+      - milvus-minio
+
 networks:
   faultlab-network:
     driver: bridge
@@ -72,3 +133,6 @@ volumes:
   mysql-data:
   redis-data:
   rabbitmq-data:
+  milvus-etcd-data:
+  milvus-minio-data:
+  milvus-data:
