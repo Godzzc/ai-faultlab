@@ -9,6 +9,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Receives Evidence Package input.
 - Builds evidence-constrained LLM prompts.
 - Supports Runbook RAG Basic with local Markdown runbooks.
+- Uses an abstract retrieval layer for Runbook retrieval.
 - Retrieves runbooks by faultType filtering plus simple keyword scoring.
 - Injects retrieved Runbook Context into the diagnosis prompt.
 - Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
@@ -33,7 +34,16 @@ keywords: RabbitMQ, publishCount, consumeCount, backlogCount
 ---
 ```
 
-The retriever:
+The retrieval layer is organized around:
+
+- `BaseRunbookRetriever`: shared retriever interface.
+- `KeywordRunbookRetriever`: current default implementation.
+- `RetrievalService`: workflow-facing entry point.
+- `RunbookChunk`: shared retrieval result model.
+
+`RetrievalService` currently delegates to `KeywordRunbookRetriever`. The workflow depends on `RetrievalService`, so a later `MilvusRunbookRetriever` can be added behind the same service boundary without changing the main diagnosis flow.
+
+The current keyword retriever:
 
 - Reads local Markdown files only.
 - Parses `docId`, `title`, `faultType`, and `keywords`.
@@ -43,12 +53,13 @@ The retriever:
 - Scores title, section, content, and runbook keywords with simple keyword matching.
 - Returns the top matching chunks.
 
-This version does not depend on a vector database or agent framework. It does not include Milvus, FAISS, Elasticsearch, LangChain, LangGraph, MCP, or Tool Calling.
+This version does not depend on a vector database or agent framework. It does not include Milvus, FAISS, Elasticsearch, Hybrid Retrieval, Rerank, LangChain, LangGraph, MCP, or Tool Calling.
 
 Future upgrades can add:
 
 - chunk embedding
 - vector retrieval
+- `MilvusRunbookRetriever`
 - BM25
 - rerank
 - Runbook management UI
@@ -172,8 +183,9 @@ POST http://localhost:8000/ai/diagnosis/generate
 
 4. Use an `MQ_BACKLOG` Evidence Package.
 5. Verify `fallback=false` when the LLM call succeeds.
-6. Verify `runbookReferences` contains only valid retrieved references, or at least confirm logs show retrieved Runbook chunks.
-7. Check Uvicorn logs for Runbook retrieval count plus `docId`, `section`, and `score`.
+6. Verify logs show `RetrievalService` retrieving Runbook chunks.
+7. Verify `runbookReferences` contains only valid retrieved references, or at least confirm logs show retrieved Runbook chunks.
+8. Check Uvicorn logs for retriever type, retrieval count, `docId`, `section`, and `score`.
 
 ## Test
 

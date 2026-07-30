@@ -6,7 +6,10 @@ from fastapi.testclient import TestClient
 from app import workflow
 from app.main import app
 from app.prompt_builder import PromptBuilder
-from app.runbook_retriever import RunbookChunk, RunbookRetriever
+from app.retrieval.base import BaseRunbookRetriever
+from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever
+from app.retrieval.models import RunbookChunk
+from app.retrieval.retrieval_service import RetrievalService
 from app.schemas import DiagnosisRequest
 
 
@@ -36,13 +39,26 @@ class FakeLlmClient:
         return ""
 
 
-class RecordingRunbookRetriever:
+class RecordingRunbookRetriever(BaseRunbookRetriever):
     def __init__(self, chunks=None, exception=None):
         self.chunks = chunks if chunks is not None else [mq_chunk()]
         self.exception = exception
         self.calls = 0
 
     def retrieve(self, request, trace_summary, top_k=3):
+        self.calls += 1
+        if self.exception:
+            raise self.exception
+        return self.chunks
+
+
+class RecordingRetrievalService:
+    def __init__(self, chunks=None, exception=None):
+        self.chunks = chunks if chunks is not None else [mq_chunk()]
+        self.exception = exception
+        self.calls = 0
+
+    def retrieve_runbooks(self, request, trace_summary, top_k=3):
         self.calls += 1
         if self.exception:
             raise self.exception
@@ -311,8 +327,12 @@ def test_workflow_passes_model_router_selection_to_llm(monkeypatch):
     assert fake_client.models == [workflow.settings.llm_long_context_model]
 
 
-def test_runbook_retriever_retrieves_mq_backlog_runbook():
-    retriever = RunbookRetriever(RUNBOOK_DIR)
+def test_base_runbook_retriever_interface_exists():
+    assert hasattr(BaseRunbookRetriever, "retrieve")
+
+
+def test_keyword_runbook_retriever_retrieves_mq_backlog_runbook():
+    retriever = KeywordRunbookRetriever(RUNBOOK_DIR)
     request = to_request(build_request(rule_result=matched_rule_result(["publishCount", "avgConsumeMs"])))
 
     chunks = retriever.retrieve(request, workflow.build_trace_summary(request))
@@ -322,8 +342,8 @@ def test_runbook_retriever_retrieves_mq_backlog_runbook():
     assert chunks[0].docId == "mq-backlog"
 
 
-def test_runbook_retriever_retrieves_thread_pool_runbook():
-    retriever = RunbookRetriever(RUNBOOK_DIR)
+def test_keyword_runbook_retriever_retrieves_thread_pool_runbook():
+    retriever = KeywordRunbookRetriever(RUNBOOK_DIR)
     request = to_request(build_request(
         rule_result=matched_rule_result(fault_type="THREAD_POOL_SATURATION"),
         scenario_code="THREAD_POOL_SATURATION",
@@ -337,8 +357,8 @@ def test_runbook_retriever_retrieves_thread_pool_runbook():
     assert chunks[0].docId == "thread-pool-saturation"
 
 
-def test_runbook_retriever_retrieves_idempotency_runbook():
-    retriever = RunbookRetriever(RUNBOOK_DIR)
+def test_keyword_runbook_retriever_retrieves_idempotency_runbook():
+    retriever = KeywordRunbookRetriever(RUNBOOK_DIR)
     request = to_request(build_request(
         rule_result=matched_rule_result(fault_type="IDEMPOTENCY_CONFLICT"),
         scenario_code="IDEMPOTENCY_CONFLICT",
@@ -352,8 +372,8 @@ def test_runbook_retriever_retrieves_idempotency_runbook():
     assert chunks[0].docId == "idempotency-conflict"
 
 
-def test_runbook_retriever_does_not_return_unmatched_fault_type():
-    retriever = RunbookRetriever(RUNBOOK_DIR)
+def test_keyword_runbook_retriever_does_not_return_unmatched_fault_type():
+    retriever = KeywordRunbookRetriever(RUNBOOK_DIR)
     request = to_request(build_request(
         rule_result=matched_rule_result(
             evidence=["publishCount=10", "consumeCount=1"],
@@ -367,11 +387,26 @@ def test_runbook_retriever_does_not_return_unmatched_fault_type():
     assert all(chunk.docId != "mq-backlog" for chunk in chunks)
 
 
-def test_runbook_retriever_missing_directory_returns_empty(tmp_path):
-    retriever = RunbookRetriever(tmp_path / "missing-runbooks")
+def test_keyword_runbook_retriever_missing_directory_returns_empty(tmp_path):
+    retriever = KeywordRunbookRetriever(tmp_path / "missing-runbooks")
     request = to_request(build_request(rule_result=matched_rule_result()))
 
     chunks = retriever.retrieve(request, workflow.build_trace_summary(request))
+
+    assert chunks == []
+
+
+def test_retrieval_service_uses_keyword_runbook_retriever_by_default():
+    service = RetrievalService()
+
+    assert isinstance(service.retriever, KeywordRunbookRetriever)
+
+
+def test_retrieval_service_returns_empty_when_retriever_raises():
+    service = RetrievalService(RecordingRunbookRetriever(exception=RuntimeError("retrieval failed")))
+    request = to_request(build_request(rule_result=matched_rule_result()))
+
+    chunks = service.retrieve_runbooks(request, workflow.build_trace_summary(request))
 
     assert chunks == []
 
@@ -388,16 +423,16 @@ def test_prompt_builder_injects_runbook_context():
 
 def test_workflow_retrieves_runbook_before_llm(monkeypatch):
     fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
-    retriever = RecordingRunbookRetriever()
+    retrieval_service = RecordingRetrievalService()
     enable_llm(monkeypatch, fake_client)
 
     response = workflow.run_diagnosis_workflow(
         to_request(build_request(rule_result=matched_rule_result())),
-        runbook_retriever=retriever,
+        retrieval_service=retrieval_service,
     )
 
     assert response.fallback is False
-    assert retriever.calls == 1
+    assert retrieval_service.calls == 1
     assert fake_client.calls == 1
     assert "mq-backlog" in fake_client.user_prompts[0]
 
@@ -405,12 +440,12 @@ def test_workflow_retrieves_runbook_before_llm(monkeypatch):
 def test_llm_valid_runbook_reference_is_retained(monkeypatch):
     references = [{"docId": "mq-backlog", "title": "fabricated title", "section": "Core Metrics"}]
     fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(runbook_references=references))])
-    retriever = RecordingRunbookRetriever(chunks=[mq_chunk()])
+    retrieval_service = RecordingRetrievalService(chunks=[mq_chunk()])
     enable_llm(monkeypatch, fake_client)
 
     response = workflow.run_diagnosis_workflow(
         to_request(build_request(rule_result=matched_rule_result())),
-        runbook_retriever=retriever,
+        retrieval_service=retrieval_service,
     )
 
     assert response.fallback is False
@@ -423,12 +458,12 @@ def test_llm_valid_runbook_reference_is_retained(monkeypatch):
 def test_llm_invalid_runbook_reference_is_filtered(monkeypatch):
     references = [{"docId": "missing-doc", "title": "Missing", "section": "Nope"}]
     fake_client = FakeLlmClient(outputs=[json.dumps(llm_response(runbook_references=references))])
-    retriever = RecordingRunbookRetriever(chunks=[mq_chunk()])
+    retrieval_service = RecordingRetrievalService(chunks=[mq_chunk()])
     enable_llm(monkeypatch, fake_client)
 
     response = workflow.run_diagnosis_workflow(
         to_request(build_request(rule_result=matched_rule_result())),
-        runbook_retriever=retriever,
+        retrieval_service=retrieval_service,
     )
 
     assert response.fallback is False
@@ -437,12 +472,12 @@ def test_llm_invalid_runbook_reference_is_filtered(monkeypatch):
 
 def test_empty_runbook_context_still_allows_llm_diagnosis(monkeypatch):
     fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
-    retriever = RecordingRunbookRetriever(chunks=[])
+    retrieval_service = RecordingRetrievalService(chunks=[])
     enable_llm(monkeypatch, fake_client)
 
     response = workflow.run_diagnosis_workflow(
         to_request(build_request(rule_result=matched_rule_result())),
-        runbook_retriever=retriever,
+        retrieval_service=retrieval_service,
     )
 
     assert response.fallback is False
@@ -452,12 +487,14 @@ def test_empty_runbook_context_still_allows_llm_diagnosis(monkeypatch):
 
 def test_runbook_retrieval_failure_does_not_cause_500(monkeypatch):
     fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])
-    retriever = RecordingRunbookRetriever(exception=RuntimeError("runbook read failed"))
+    retrieval_service = RetrievalService(
+        RecordingRunbookRetriever(exception=RuntimeError("runbook read failed"))
+    )
     enable_llm(monkeypatch, fake_client)
 
     response = workflow.run_diagnosis_workflow(
         to_request(build_request(rule_result=matched_rule_result())),
-        runbook_retriever=retriever,
+        retrieval_service=retrieval_service,
     )
 
     assert response.fallback is False
