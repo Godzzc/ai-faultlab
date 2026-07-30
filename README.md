@@ -281,15 +281,21 @@ Before using vector Runbook retrieval, configure `DASHSCOPE_API_KEY`, start `fau
 POST http://localhost:8000/ai/runbooks/index
 ```
 
-The AI service embeds local Markdown Runbook chunks with Alibaba Cloud Bailian `text-embedding-v4` at dimension `1024`, writes them to Milvus collection `faultlab_runbook_chunks`, and uses `MilvusRunbookRetriever` during diagnosis. If Milvus retrieval fails or returns no chunks, the service falls back to `KeywordRunbookRetriever`.
+The request body is optional. Use `{"forceRebuild": true}` to force a full rebuild.
+
+The AI service embeds local Markdown Runbook chunks with Alibaba Cloud Bailian `text-embedding-v4` at dimension `1024`, writes them to Milvus collection `faultlab_runbook_chunks`, and uses `MilvusRunbookRetriever` during diagnosis. Index governance stores document state in `faultlab-ai-service/data/runbook_index_state.json`, compares Markdown content hashes, skips unchanged documents, deletes old chunks when content changes, and removes stale chunks when a Runbook file is deleted. If Milvus retrieval fails or returns no chunks, the service falls back to `KeywordRunbookRetriever`.
 
 Common issues:
 
 - Milvus not started: `MilvusRunbookRetriever` fails and diagnosis falls back to keyword retrieval.
 - Collection missing: call `POST /ai/runbooks/index`.
+- Unchanged documents skipped: this is expected when content hashes match the state file.
+- Need full rebuild: call `POST /ai/runbooks/index` with `{"forceRebuild": true}`.
 - Embedding timeout: retry indexing and check Bailian network/API availability.
 - `DASHSCOPE_API_KEY` missing: embedding and LLM calls cannot run; diagnosis uses fallback where applicable.
 - Vector dimension mismatch: confirm `settings.embedding_dimension` matches the Milvus collection schema, then recreate the collection if needed.
+
+Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, no Hybrid Retrieval, and no Rerank.
 
 ## License
 

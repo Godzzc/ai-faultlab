@@ -76,6 +76,34 @@ class MilvusStore:
         logger.info("Upserted runbook chunks into Milvus count=%s", len(records))
         return len(records)
 
+    def delete_by_doc_id(self, doc_id: str) -> int:
+        if not doc_id:
+            return 0
+        try:
+            self.ensure_collection()
+            _, Collection, _, _, _ = self._milvus_types()
+            collection = Collection(self.collection_name)
+            result = collection.delete(self._doc_id_expr(doc_id))
+            collection.flush()
+            return self._delete_count(result)
+        except Exception as exc:
+            logger.warning("Failed to delete Milvus chunks by docId=%s error=%s", doc_id, exc)
+            raise RuntimeError(f"Failed to delete Milvus chunks for docId={doc_id}") from exc
+
+    def delete_by_chunk_ids(self, chunk_ids: list[str]) -> int:
+        if not chunk_ids:
+            return 0
+        try:
+            self.ensure_collection()
+            _, Collection, _, _, _ = self._milvus_types()
+            collection = Collection(self.collection_name)
+            result = collection.delete(self._chunk_ids_expr(chunk_ids))
+            collection.flush()
+            return self._delete_count(result)
+        except Exception as exc:
+            logger.warning("Failed to delete Milvus chunks by ids error=%s", exc)
+            raise RuntimeError("Failed to delete Milvus chunks by ids") from exc
+
     def search(
         self,
         embedding: list[float],
@@ -164,6 +192,29 @@ class MilvusStore:
         escaped = fault_type.replace("\\", "\\\\").replace('"', '\\"')
         return f'faultType == "{escaped}"'
 
+    def _doc_id_expr(self, doc_id: str) -> str:
+        escaped = doc_id.replace("\\", "\\\\").replace('"', '\\"')
+        return f'docId == "{escaped}"'
+
+    def _chunk_ids_expr(self, chunk_ids: list[str]) -> str:
+        escaped_ids = [
+            chunk_id.replace("\\", "\\\\").replace('"', '\\"')
+            for chunk_id in chunk_ids
+        ]
+        values = ", ".join(f'"{chunk_id}"' for chunk_id in escaped_ids)
+        return f"id in [{values}]"
+
+    def _delete_count(self, result: Any) -> int:
+        for attr in ["delete_count", "delete_cnt"]:
+            value = getattr(result, attr, None)
+            if value is not None:
+                return int(value)
+        if isinstance(result, dict):
+            for key in ["delete_count", "delete_cnt"]:
+                if key in result:
+                    return int(result[key])
+        return 0
+
     def _split_keywords(self, value: str) -> list[str]:
         return [item.strip() for item in value.split(",") if item.strip()]
 
@@ -178,5 +229,5 @@ class MilvusStore:
 def stable_chunk_id(chunk: RunbookChunk) -> str:
     import hashlib
 
-    raw = f"{chunk.docId}:{chunk.section}"
+    raw = f"{chunk.docId}:{chunk.section}:{chunk.content}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()

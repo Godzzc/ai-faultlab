@@ -108,17 +108,50 @@ Start Milvus from Docker Compose, then index local runbooks:
 POST http://localhost:8000/ai/runbooks/index
 ```
 
+Request body is optional:
+
+```json
+{
+  "forceRebuild": false
+}
+```
+
 Response:
 
 ```json
 {
-  "indexedCount": 12,
+  "status": "success",
   "collectionName": "faultlab_runbook_chunks",
-  "status": "success"
+  "indexedCount": 12,
+  "skippedCount": 0,
+  "deletedCount": 0,
+  "failedCount": 0,
+  "indexedDocuments": ["mq-backlog", "thread-pool-saturation", "idempotency-conflict"],
+  "skippedDocuments": [],
+  "failedDocuments": [],
+  "forceRebuild": false
 }
 ```
 
-Indexing is explicit. The service does not index runbooks during startup.
+RAG indexing governance Basic:
+
+- Calculates a SHA-256 content hash for each Markdown Runbook.
+- Skips unchanged documents on repeated indexing.
+- Deletes old Milvus chunks and reindexes when a document changes.
+- Cleans old Milvus chunks when a Runbook Markdown file is removed.
+- Supports `forceRebuild=true` to rebuild all documents.
+- Stores index state in `faultlab-ai-service/data/runbook_index_state.json`.
+
+`runbook_index_state.json` is a runtime file and must not be committed. Indexing is explicit; the service does not index runbooks during startup.
+
+Current indexing limitations:
+
+- No MySQL index state table.
+- No management UI.
+- No scheduled scanner.
+- No async indexing queue.
+- No rollback mechanism.
+- No Hybrid Retrieval or Rerank.
 
 ## ModelRouter
 
@@ -221,23 +254,34 @@ docker compose ps
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-4. Build the Runbook index:
+4. Build the Runbook index for the first time:
 
 ```text
 POST http://localhost:8000/ai/runbooks/index
 ```
 
-5. Call:
+5. Verify `indexedCount > 0`.
+6. Call the same endpoint again and verify `indexedCount = 0` and `skippedCount > 0`.
+7. Force rebuild:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+body: {"forceRebuild": true}
+```
+
+8. Modify one Markdown file under `runbooks/`, index again, and verify only the changed document is rebuilt.
+9. Delete one Markdown file locally, index again, and verify old chunks are deleted and the state entry is removed.
+10. Call diagnosis:
 
 ```text
 POST http://localhost:8000/ai/diagnosis/generate
 ```
 
-6. Use an `MQ_BACKLOG` Evidence Package.
-7. Verify `fallback=false` when the LLM call succeeds.
-8. Verify logs show `MilvusRunbookRetriever` retrieving Runbook chunks.
-9. Verify `runbookReferences` contains only valid retrieved references.
-10. Stop Milvus and call diagnosis again to verify fallback to `KeywordRunbookRetriever`.
+11. Use an `MQ_BACKLOG` Evidence Package.
+12. Verify `fallback=false` when the LLM call succeeds.
+13. Verify logs show `MilvusRunbookRetriever` retrieving Runbook chunks.
+14. Verify `runbookReferences` contains only valid retrieved references.
+15. Stop Milvus and call diagnosis again to verify fallback to `KeywordRunbookRetriever`.
 
 ## Test
 

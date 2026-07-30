@@ -192,11 +192,28 @@ Expected response:
 
 ```json
 {
-  "indexedCount": 12,
+  "status": "success",
   "collectionName": "faultlab_runbook_chunks",
-  "status": "success"
+  "indexedCount": 12,
+  "skippedCount": 0,
+  "deletedCount": 0,
+  "failedCount": 0,
+  "indexedDocuments": ["mq-backlog"],
+  "skippedDocuments": [],
+  "failedDocuments": [],
+  "forceRebuild": false
 }
 ```
+
+The request body is optional:
+
+```json
+{
+  "forceRebuild": false
+}
+```
+
+Index governance stores runtime state in `faultlab-ai-service/data/runbook_index_state.json`. The service calculates each Markdown file content hash, skips unchanged documents, deletes old Milvus chunks when a document changes, and removes old chunks when a Runbook Markdown file is deleted. Use `{"forceRebuild": true}` to force a full rebuild.
 
 Diagnosis retrieval tries `MilvusRunbookRetriever` first. If Milvus is unavailable, the collection does not exist, embedding fails, or vector search returns no chunks, `RetrievalService` falls back to `KeywordRunbookRetriever`.
 
@@ -204,9 +221,15 @@ Common issues:
 
 - Milvus not started: run `docker compose ps` and check `docker compose logs -f milvus-standalone`.
 - Collection missing: call `POST /ai/runbooks/index`.
+- Unchanged documents skipped: expected when content hash matches the state file.
+- Force full rebuild: call `POST /ai/runbooks/index` with `{"forceRebuild": true}`.
 - Embedding timeout: verify `DASHSCOPE_API_KEY` and network access to Bailian.
 - `DASHSCOPE_API_KEY` missing: indexing fails and LLM diagnosis will use fallback.
 - Vector dimension mismatch: recreate the Milvus collection after changing `embedding_dimension`.
+
+Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, no Hybrid Retrieval, and no Rerank.
+
+Do not commit `faultlab-ai-service/data/runbook_index_state.json`; it is generated at runtime.
 
 ## Notes
 
