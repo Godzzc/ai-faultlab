@@ -215,7 +215,9 @@ The request body is optional:
 
 Index governance stores runtime state in `faultlab-ai-service/data/runbook_index_state.json`. The service calculates each Markdown file content hash, skips unchanged documents, deletes old Milvus chunks when a document changes, and removes old chunks when a Runbook Markdown file is deleted. Use `{"forceRebuild": true}` to force a full rebuild.
 
-Diagnosis retrieval tries `MilvusRunbookRetriever` first. If Milvus is unavailable, the collection does not exist, embedding fails, or vector search returns no chunks, `RetrievalService` falls back to `KeywordRunbookRetriever`.
+Diagnosis retrieval uses Hybrid Retrieval Basic. `RetrievalService` calls `HybridRunbookRetriever`, which runs Milvus vector retrieval and BM25-like local Markdown retrieval, fuses both result lists with Reciprocal Rank Fusion, and applies a lightweight rule-based rerank before returning the final topK Runbook chunks.
+
+If Milvus is unavailable, the collection does not exist, or embedding fails, Hybrid retrieval still returns BM25-like keyword results. If the Hybrid retriever itself fails, `RetrievalService` falls back to `KeywordRunbookRetriever`.
 
 Common issues:
 
@@ -226,8 +228,9 @@ Common issues:
 - Embedding timeout: verify `DASHSCOPE_API_KEY` and network access to Bailian.
 - `DASHSCOPE_API_KEY` missing: indexing fails and LLM diagnosis will use fallback.
 - Vector dimension mismatch: recreate the Milvus collection after changing `embedding_dimension`.
+- Hybrid logs should include vector result count, BM25 result count, fused result count, and final result count.
 
-Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, no Hybrid Retrieval, and no Rerank.
+Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, no dedicated rerank model, and no retrieval evaluation dataset. The keyword scoring is BM25-like and dependency-free, not a full search-engine BM25 implementation. The reranker is rule-based and does not call a rerank model.
 
 Do not commit `faultlab-ai-service/data/runbook_index_state.json`; it is generated at runtime.
 

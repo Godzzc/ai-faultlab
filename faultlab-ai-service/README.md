@@ -12,7 +12,8 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Uses an abstract retrieval layer for Runbook retrieval.
 - Supports Milvus Vector Retrieval for Runbook chunks.
 - Uses Alibaba Cloud Bailian `text-embedding-v4` for Runbook embeddings.
-- Falls back to `KeywordRunbookRetriever` when Milvus retrieval fails or returns no chunks.
+- Supports Hybrid Retrieval Basic: Milvus vector retrieval + BM25-like keyword retrieval + RRF fusion + lightweight rerank.
+- Keeps keyword-only retrieval available when Milvus or embedding is unavailable.
 - Injects retrieved Runbook Context into the diagnosis prompt.
 - Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
@@ -39,12 +40,16 @@ keywords: RabbitMQ, publishCount, consumeCount, backlogCount
 The retrieval layer is organized around:
 
 - `BaseRunbookRetriever`: shared retriever interface.
-- `MilvusRunbookRetriever`: current primary retriever.
+- `MilvusRunbookRetriever`: vector retriever backed by Milvus.
+- `Bm25RunbookRetriever`: local Markdown BM25-like keyword retriever.
+- `HybridRunbookRetriever`: default retriever that combines vector and keyword results.
 - `KeywordRunbookRetriever`: local Markdown fallback retriever.
+- `reciprocal_rank_fusion`: RRF result fusion.
+- `LightweightRunbookReranker`: rule-based reranker.
 - `RetrievalService`: workflow-facing entry point.
 - `RunbookChunk`: shared retrieval result model.
 
-`RetrievalService` first tries `MilvusRunbookRetriever`. If Milvus is unavailable, the collection is missing, embedding generation fails, or Milvus returns no chunks, it falls back to `KeywordRunbookRetriever`.
+`RetrievalService` uses `HybridRunbookRetriever` by default. The hybrid retriever calls Milvus vector retrieval and BM25-like keyword retrieval, fuses the two ranked result lists with Reciprocal Rank Fusion, and then applies a lightweight rule-based rerank before returning the final topK chunks. If the hybrid retriever itself fails, `RetrievalService` still falls back to `KeywordRunbookRetriever`.
 
 The Milvus retriever:
 
@@ -52,25 +57,30 @@ The Milvus retriever:
 - Uses embedding dimension `1024`.
 - Searches collection `faultlab_runbook_chunks`.
 - Applies faultType filtering.
-- Returns `RunbookChunk` objects to the existing prompt builder.
+- Returns `RunbookChunk` objects to the hybrid retriever.
 
-The fallback keyword retriever:
+The BM25-like keyword retriever:
 
 - Reads local Markdown files only.
 - Parses `docId`, `title`, `faultType`, and `keywords`.
 - Splits content by second-level headings (`##`) into sections.
 - Applies strong filtering by `ruleResult.faultType` or `experiment.scenarioCode`.
 - Extracts keywords from rule reason, rule evidence, metrics, and trace summary.
-- Scores title, section, content, and runbook keywords with simple keyword matching.
+- Scores title, section, content, and runbook keywords with BM25-like keyword scoring.
 - Returns the top matching chunks.
 
-This version is vector retrieval with keyword fallback. It is not Hybrid Retrieval and does not include Rerank, FAISS, Elasticsearch, LangChain, LangGraph, MCP, or Tool Calling.
+The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, document length normalization, title/section/keyword boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
+
+The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, operational sections such as troubleshooting and fixes, evidence metrics, metric keywords, and chunks found by both vector and keyword retrieval.
+
+This version does not include FAISS, Elasticsearch, LangChain, LangGraph, MCP, Tool Calling, a dedicated rerank model, or a retrieval evaluation dataset.
 
 Future upgrades can add:
 
-- Hybrid Retrieval
-- BM25
-- rerank
+- standard BM25
+- BGE reranker or Alibaba Cloud Bailian rerank
+- retrieval evaluation
+- recall@k / MRR
 - Runbook management UI
 
 ## Configuration
@@ -97,6 +107,11 @@ Other LLM settings use defaults in `app/config.py`, including:
 - `milvus_port`
 - `milvus_collection_name`
 - `retrieval_mode`
+- `hybrid_rrf_k`
+- `hybrid_vector_top_k`
+- `hybrid_bm25_top_k`
+- `retrieval_top_k`
+- `rerank_enabled`
 
 Only `DASHSCOPE_API_KEY` is read from the environment. Milvus and embedding settings currently use code defaults in `app/config.py`.
 
@@ -151,7 +166,8 @@ Current indexing limitations:
 - No scheduled scanner.
 - No async indexing queue.
 - No rollback mechanism.
-- No Hybrid Retrieval or Rerank.
+- No retrieval evaluation dataset.
+- No dedicated rerank model.
 
 ## ModelRouter
 
@@ -236,7 +252,7 @@ Fallback returns a displayable rule-based report when:
 
 Fallback reports keep `ruleResult.evidence` and `ruleResult.suggestions` when available.
 
-Runbook retrieval fallback is separate from diagnosis fallback. If Milvus retrieval fails, diagnosis continues with `KeywordRunbookRetriever`.
+Runbook retrieval fallback is separate from diagnosis fallback. If Milvus retrieval or embedding fails, hybrid retrieval continues with BM25-like keyword results. If the hybrid retriever itself fails, diagnosis continues with `KeywordRunbookRetriever`.
 
 ## Local Verification
 
@@ -279,9 +295,10 @@ POST http://localhost:8000/ai/diagnosis/generate
 
 11. Use an `MQ_BACKLOG` Evidence Package.
 12. Verify `fallback=false` when the LLM call succeeds.
-13. Verify logs show `MilvusRunbookRetriever` retrieving Runbook chunks.
-14. Verify `runbookReferences` contains only valid retrieved references.
-15. Stop Milvus and call diagnosis again to verify fallback to `KeywordRunbookRetriever`.
+13. Verify logs show `MilvusRunbookRetriever` and `Bm25RunbookRetriever` retrieving Runbook chunks.
+14. Verify logs show RRF fusion and `LightweightRunbookReranker` execution.
+15. Verify `runbookReferences` contains only valid retrieved references.
+16. Stop Milvus and call diagnosis again to verify keyword-only retrieval still provides Runbook context.
 
 ## Test
 
