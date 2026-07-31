@@ -7,8 +7,8 @@ from app import workflow
 from app.main import app
 from app.prompt_builder import PromptBuilder
 from app.retrieval.base import BaseRunbookRetriever
+from app.retrieval.hybrid_runbook_retriever import HybridRunbookRetriever
 from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever
-from app.retrieval.milvus_runbook_retriever import MilvusRunbookRetriever
 from app.retrieval.models import RunbookChunk
 from app.retrieval.retrieval_service import RetrievalService
 from app.schemas import DiagnosisRequest
@@ -397,10 +397,10 @@ def test_keyword_runbook_retriever_missing_directory_returns_empty(tmp_path):
     assert chunks == []
 
 
-def test_retrieval_service_uses_keyword_runbook_retriever_by_default():
+def test_retrieval_service_uses_hybrid_runbook_retriever_by_default():
     service = RetrievalService()
 
-    assert isinstance(service.primary_retriever, MilvusRunbookRetriever)
+    assert isinstance(service.primary_retriever, HybridRunbookRetriever)
     assert isinstance(service.fallback_retriever, KeywordRunbookRetriever)
 
 
