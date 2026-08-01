@@ -17,6 +17,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Injects retrieved Runbook Context into the diagnosis prompt.
 - Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
 - Supports RAG Retrieval Evaluation with Hit@K, Recall@K, and MRR.
+- Supports Markdown RAG Evaluation Report generation for human review and comparison.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
 - Supports basic `ModelRouter` model selection.
 - Parses and validates LLM JSON output.
@@ -128,6 +129,33 @@ python scripts/evaluate_retrieval.py --retriever all --top-k 3
 ```
 
 The output includes summary metrics and each case's retrieved `docId + section`.
+
+Generate a Markdown report:
+
+```bash
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
+```
+
+Generated Markdown reports under `evaluation/reports/*.md` are ignored by Git by default. The directory is kept with `evaluation/reports/.gitkeep`.
+
+The evaluation API can also include a Markdown report while keeping `application/json` responses:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "all", "topK": 3, "report": true}
+```
+
+When `report=true`, the response includes `markdownReport`. The report contains:
+
+- Overall Metrics
+- Retriever Comparison
+- Metrics By Fault Type
+- Case Details
+- Miss Cases
+- Optimization Suggestions
+
+The optimization suggestions are rule-based and do not call an LLM. Current reporting limits: no nDCG, no visualization UI, and no CI regression gate.
 
 ## Configuration
 

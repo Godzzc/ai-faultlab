@@ -269,6 +269,7 @@ Other supported request bodies:
 ```text
 {"retriever": "hybrid", "topK": 3}
 {"retriever": "all", "topK": 3}
+{"retriever": "all", "topK": 3, "report": true}
 ```
 
 Run from the command line:
@@ -276,9 +277,13 @@ Run from the command line:
 ```powershell
 cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
 ```
 
-BM25 evaluation uses local Markdown only. Hybrid and Milvus evaluation need Milvus and embedding dependencies; when a retriever fails in `all`, the report includes that retriever's error and continues with the rest. Future extensions can add more cases, nDCG, faultType grouped metrics, retrieval result visualization, and CI regression evaluation.
+Markdown reports include Overall Metrics, Retriever Comparison, Metrics By Fault Type, Case Details, Miss Cases, and Optimization Suggestions. API report responses keep `application/json` and add `markdownReport`.
+
+BM25 evaluation uses local Markdown only. Hybrid and Milvus evaluation need Milvus and embedding dependencies; when a retriever fails in `all`, the report includes that retriever's error and continues with the rest. Report suggestions are rule-based and do not call the LLM. Current limits: no nDCG, no visualization UI, and no CI regression gate.
 
 ## Notes
 
