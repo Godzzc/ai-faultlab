@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from app.retrieval.models import RunbookChunk, runbook_chunks_to_prompt_context
 from app.schemas import DiagnosisRequest
 
 
@@ -9,28 +10,38 @@ class PromptBuilder:
         self,
         request: DiagnosisRequest,
         trace_summary: dict[str, Any],
+        runbook_chunks: list[RunbookChunk] | None = None,
     ) -> tuple[str, str]:
+        runbook_context = runbook_chunks_to_prompt_context(runbook_chunks or [])
+
         system_prompt = (
-            "你是 AI FaultLab 的后端故障诊断助手。"
-            "你只能基于用户提供的 Evidence Package 生成诊断报告。"
-            "不要编造不存在的指标、Trace 节点、Runbook 引用或故障事实。"
-            "不要输出 Markdown，不要输出解释性前后缀。"
-            "必须只输出严格 JSON object。"
+            "You are the AI FaultLab backend incident diagnosis assistant. "
+            "Generate a diagnosis report only from the provided Evidence Package and Runbook Context. "
+            "Do not invent metrics, trace nodes, runbook references, or incident facts. "
+            "You may use Runbook Context as operational guidance, but must not fabricate content outside it. "
+            "runbookReferences may only cite docId and section pairs present in Runbook Context. "
+            "Do not output Markdown or explanatory text. Output a strict JSON object only."
         )
+
         evidence_package = request.model_dump(by_alias=True)
         evidence_package["traceSummary"] = trace_summary
+
         user_prompt = (
-            "请基于以下 Evidence Package 生成 DiagnosisResponse JSON。"
-            "要求："
-            "1. 字段必须包含 experimentId, faultType, faultName, confidence, summary, "
-            "phenomenon, evidence, rootCauses, suggestions, runbookReferences, fallback。"
-            "2. confidence 必须在 0 到 1 之间。"
-            "3. phenomenon/evidence/rootCauses/suggestions/runbookReferences 必须是数组。"
-            "4. 如果 ruleResult.matched=true，结论不得和 ruleResult 明显冲突。"
-            "5. 如果证据不足，summary 必须说明证据不足。"
-            "6. 当前没有 Runbook RAG，runbookReferences 必须返回空数组。"
-            "7. LLM 成功生成时 fallback 必须为 false。"
+            "Generate a DiagnosisResponse JSON from the Evidence Package.\n"
+            "Requirements:\n"
+            "1. Include fields: experimentId, faultType, faultName, confidence, summary, "
+            "phenomenon, evidence, rootCauses, suggestions, runbookReferences, fallback.\n"
+            "2. confidence must be between 0 and 1.\n"
+            "3. phenomenon, evidence, rootCauses, suggestions, and runbookReferences must be arrays.\n"
+            "4. If ruleResult.matched=true, the conclusion must not conflict with ruleResult.\n"
+            "5. If evidence is insufficient, summary must state that evidence is insufficient.\n"
+            "6. You can reference Runbook Context, but cannot invent runbook content.\n"
+            "7. runbookReferences must contain only docId, title, and section values from Runbook Context.\n"
+            "8. If Runbook Context is empty, generate only from Evidence Package and return empty runbookReferences.\n"
+            "9. When LLM generation succeeds, fallback must be false.\n"
             "\nEvidence Package:\n"
             f"{json.dumps(evidence_package, ensure_ascii=False)}"
+            "\nRunbook Context:\n"
+            f"{json.dumps(runbook_context, ensure_ascii=False)}"
         )
         return system_prompt, user_prompt

@@ -211,6 +211,7 @@ Python AI Service：
 
 - `GET /ai/health`
 - `POST /ai/diagnosis/generate`
+- `POST /ai/runbooks/evaluate`
 
 ## v0.3 演示流程
 
@@ -252,6 +253,117 @@ Python AI Service 当前包含基础模型路由能力。路由逻辑在 `faultl
 - Runbook 管理后台
 - 生产级鉴权
 - 完整监控告警
+
+## Milvus Runbook Retrieval
+
+The local Docker Compose stack includes Milvus standalone:
+
+- `faultlab-milvus-etcd`
+- `faultlab-milvus-minio`
+- `faultlab-milvus-standalone`
+
+Start infrastructure:
+
+```bash
+cd deploy
+docker compose up -d
+docker compose ps
+```
+
+Milvus is exposed on:
+
+```text
+localhost:19530
+```
+
+Before using vector Runbook retrieval, configure `DASHSCOPE_API_KEY`, start `faultlab-ai-service`, and build the Runbook index:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+```
+
+The request body is optional. Use `{"forceRebuild": true}` to force a full rebuild.
+
+The AI service embeds local Markdown Runbook chunks with Alibaba Cloud Bailian `text-embedding-v4` at dimension `1024` and writes them to Milvus collection `faultlab_runbook_chunks`. Diagnosis retrieval uses Hybrid Retrieval Basic: Milvus vector retrieval + BM25-like keyword retrieval + Reciprocal Rank Fusion + lightweight rule-based rerank. Index governance stores document state in `faultlab-ai-service/data/runbook_index_state.json`, compares Markdown content hashes, skips unchanged documents, deletes old chunks when content changes, and removes stale chunks when a Runbook file is deleted. If Milvus retrieval or embedding fails, diagnosis continues with BM25-like keyword retrieval. If the hybrid retriever itself fails, the service falls back to `KeywordRunbookRetriever`.
+
+Common issues:
+
+- Milvus not started: `MilvusRunbookRetriever` fails and diagnosis continues with BM25-like keyword retrieval.
+- Collection missing: call `POST /ai/runbooks/index`.
+- Unchanged documents skipped: this is expected when content hashes match the state file.
+- Need full rebuild: call `POST /ai/runbooks/index` with `{"forceRebuild": true}`.
+- Embedding timeout: retry indexing and check Bailian network/API availability.
+- `DASHSCOPE_API_KEY` missing: embedding and LLM calls cannot run; diagnosis uses fallback where applicable.
+- Vector dimension mismatch: confirm `settings.embedding_dimension` matches the Milvus collection schema, then recreate the collection if needed.
+
+Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, and no dedicated rerank model. The keyword retriever is BM25-like and dependency-free, not a full search-engine BM25 implementation. The reranker is rule-based and does not call a rerank model.
+
+## RAG Retrieval Evaluation
+
+`faultlab-ai-service` includes a basic RAG retrieval evaluation runner for measuring Runbook retrieval quality without calling the LLM.
+
+Dataset:
+
+```text
+faultlab-ai-service/evaluation/rag_eval_cases.json
+```
+
+Metrics:
+
+- Hit@K
+- Recall@K
+- MRR
+
+Evaluation API:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "hybrid", "topK": 3}
+```
+
+Supported retrievers are `bm25`, `hybrid`, `milvus`, and `all`. BM25 mode reads local Markdown runbooks only. Hybrid and Milvus require vector retrieval dependencies to be available; if a retriever fails during `all`, the response includes that retriever's error and continues evaluating the others.
+
+Command line:
+
+```bash
+cd faultlab-ai-service
+python scripts/evaluate_retrieval.py --retriever hybrid --top-k 3
+python scripts/evaluate_retrieval.py --retriever all --top-k 3
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
+```
+
+Markdown reports include Overall Metrics, Retriever Comparison, Metrics By Fault Type, Case Details, Miss Cases, and Optimization Suggestions.
+
+The API can also include a Markdown report while still returning `application/json`:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "all", "topK": 3, "report": true}
+```
+
+The report suggestions are rule-based and do not call the LLM. Future extensions can add more cases, nDCG, retrieval result visualization, and CI regression evaluation.
+
+## RAG v0.5 Documentation
+
+当前 RAG 阶段定位为 `v0.5 RAG Demo`，重点是把 Runbook 索引、Hybrid Retrieval、Prompt 注入、引用校验和检索评测串成闭环。它不是生产级 Runbook 管理平台。
+
+文档入口：
+
+- [RAG v0.5 Demo Guide](docs/rag-v0.5-demo-guide.md)：本地演示流程、索引演示、诊断演示、fallback 和评测报告演示。
+- [RAG Architecture](docs/rag-architecture.md)：总体架构、离线索引、在线检索、fallback 和关键模块职责。
+- [RAG Evaluation Guide](docs/rag-evaluation-guide.md)：评测数据集、Hit@K / Recall@K / MRR、API/CLI 用法和报告解读。
+- [RAG Interview Guide](docs/rag-interview-guide.md)：面试口述版本、常见追问、简历写法和项目亮点总结。
+
+当前 RAG v0.5 能力摘要：
+
+- Runbook Markdown section chunking。
+- 百炼 `text-embedding-v4` + Milvus vector retrieval。
+- BM25-like keyword retrieval，不是标准搜索引擎级 BM25。
+- RRF fusion + lightweight rule-based rerank，不是真实 rerank 模型。
+- content hash、forceRebuild、旧 chunk 清理等基础索引治理。
+- Prompt 注入 Runbook Context，服务端校验 `runbookReferences`。
+- RAG Evaluation 支持 Hit@K、Recall@K、MRR 和 Markdown Report。
 
 ## License
 

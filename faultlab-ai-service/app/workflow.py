@@ -7,7 +7,9 @@ from app.json_parser import parse_and_validate_json
 from app.llm_client import LlmClient
 from app.model_router import ModelRouter
 from app.prompt_builder import PromptBuilder
-from app.schemas import DiagnosisRequest, DiagnosisResponse, TraceNode
+from app.retrieval.models import RunbookChunk
+from app.retrieval.retrieval_service import RetrievalService
+from app.schemas import DiagnosisRequest, DiagnosisResponse, RunbookReference, TraceNode
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +19,16 @@ def run_diagnosis_workflow(
     llm_client: LlmClient | None = None,
     prompt_builder: PromptBuilder | None = None,
     model_router: ModelRouter | None = None,
+    retrieval_service: RetrievalService | None = None,
 ) -> DiagnosisResponse:
     try:
         trace_summary = build_trace_summary(request)
+        runbook_chunks = retrieve_runbook(request, trace_summary, retrieval_service)
         if not should_call_llm():
             logger.info("fallback reason=llm_disabled_or_api_key_missing")
             return fallback_if_needed(request, build_fallback_report(request))
 
-        system_prompt, user_prompt = build_prompt(request, trace_summary, prompt_builder)
+        system_prompt, user_prompt = build_prompt(request, trace_summary, runbook_chunks, prompt_builder)
         route_result = select_model(request, trace_summary, model_router)
         response = call_llm_and_parse(
             request,
@@ -33,6 +37,7 @@ def run_diagnosis_workflow(
             route_result.model,
             llm_client,
         )
+        validate_runbook_references(response, runbook_chunks)
         return fallback_if_needed(request, response)
     except Exception as exc:
         logger.exception("Diagnosis workflow failed: %s", exc)
@@ -92,10 +97,20 @@ def flatten_trace_nodes(nodes: list[TraceNode]) -> list[TraceNode]:
 def build_prompt(
     request: DiagnosisRequest,
     trace_summary: dict[str, Any],
+    runbook_chunks: list[RunbookChunk] | None = None,
     prompt_builder: PromptBuilder | None = None,
 ) -> tuple[str, str]:
     builder = prompt_builder or PromptBuilder()
-    return builder.build(request, trace_summary)
+    return builder.build(request, trace_summary, runbook_chunks or [])
+
+
+def retrieve_runbook(
+    request: DiagnosisRequest,
+    trace_summary: dict[str, Any],
+    retrieval_service: RetrievalService | None = None,
+) -> list[RunbookChunk]:
+    service = retrieval_service or RetrievalService()
+    return service.retrieve_runbooks(request, trace_summary)
 
 
 def select_model(
@@ -140,4 +155,40 @@ def fallback_if_needed(
 ) -> DiagnosisResponse:
     if not response.summary:
         return build_fallback_report(request)
+    return response
+
+
+def validate_runbook_references(
+    response: DiagnosisResponse,
+    runbook_chunks: list[RunbookChunk],
+) -> DiagnosisResponse:
+    allowed = {
+        (chunk.docId, chunk.section): chunk
+        for chunk in runbook_chunks
+    }
+    if not allowed:
+        response.runbook_references = []
+        logger.info("No valid runbookReferences retained")
+        return response
+
+    retained: list[RunbookReference] = []
+    seen: set[tuple[str, str]] = set()
+    for reference in response.runbook_references or []:
+        key = (reference.doc_id, reference.section)
+        chunk = allowed.get(key)
+        if not chunk or key in seen:
+            continue
+        retained.append(
+            RunbookReference(
+                doc_id=chunk.docId,
+                title=chunk.title,
+                section=chunk.section,
+                score=chunk.score,
+            )
+        )
+        seen.add(key)
+
+    response.runbook_references = retained
+    if not retained:
+        logger.info("No valid runbookReferences retained")
     return response

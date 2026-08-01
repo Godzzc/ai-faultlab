@@ -1,29 +1,205 @@
 # faultlab-ai-service
 
-`faultlab-ai-service` 是 AI FaultLab 的 Python FastAPI AI 诊断服务。
+`faultlab-ai-service` is the Python FastAPI AI diagnosis service for AI FaultLab.
 
-当前服务已经接入阿里云百炼 OpenAI 兼容接口，用于基于 Java 后端传入的 Evidence Package 生成结构化 AI 诊断报告。
+The service receives an Evidence Package from the Java backend, builds a constrained diagnosis prompt, retrieves Runbook context, calls the Alibaba Cloud Bailian OpenAI-compatible API, validates strict JSON output, and falls back to rule-based diagnosis when LLM diagnosis is unavailable.
 
-## 当前能力
+## Current Capabilities
 
-- 接收 Evidence Package
-- 构造受证据约束的 LLM Prompt
-- 调用阿里云百炼 OpenAI 兼容接口
-- 支持基础 ModelRouter
-- 解析和校验 LLM 输出 JSON
-- 补齐缺失字段并限制 `confidence` 到 `0..1`
-- LLM 不可用、超时、空响应、JSON 非法时自动 fallback
-- 未配置 `DASHSCOPE_API_KEY` 时自动 fallback，不调用 LLM
+- Receives Evidence Package input.
+- Builds evidence-constrained LLM prompts.
+- Supports Runbook RAG Basic with local Markdown runbooks.
+- Uses an abstract retrieval layer for Runbook retrieval.
+- Supports Milvus Vector Retrieval for Runbook chunks.
+- Uses Alibaba Cloud Bailian `text-embedding-v4` for Runbook embeddings.
+- Supports Hybrid Retrieval Basic: Milvus vector retrieval + BM25-like keyword retrieval + RRF fusion + lightweight rerank.
+- Keeps keyword-only retrieval available when Milvus or embedding is unavailable.
+- Injects retrieved Runbook Context into the diagnosis prompt.
+- Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
+- Supports RAG Retrieval Evaluation with Hit@K, Recall@K, and MRR.
+- Supports Markdown RAG Evaluation Report generation for human review and comparison.
+- Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
+- Supports basic `ModelRouter` model selection.
+- Parses and validates LLM JSON output.
+- Fills missing fields and clamps `confidence` to `0..1`.
+- Falls back automatically when LLM is disabled, API key is missing, LLM errors, response is empty, or JSON is invalid.
 
-## 配置
+## Runbook RAG
 
-当前只有 `DASHSCOPE_API_KEY` 需要作为环境变量配置：
+Runbook RAG uses Markdown files from `runbooks/`. The files are split into section chunks, embedded with Alibaba Cloud Bailian `text-embedding-v4`, and stored in Milvus.
+
+Each runbook should include YAML-style front matter:
+
+```markdown
+---
+docId: mq-backlog
+title: MQ backlog runbook
+faultType: MQ_BACKLOG
+keywords: RabbitMQ, publishCount, consumeCount, backlogCount
+---
+```
+
+The retrieval layer is organized around:
+
+- `BaseRunbookRetriever`: shared retriever interface.
+- `MilvusRunbookRetriever`: vector retriever backed by Milvus.
+- `Bm25RunbookRetriever`: local Markdown BM25-like keyword retriever.
+- `HybridRunbookRetriever`: default retriever that combines vector and keyword results.
+- `KeywordRunbookRetriever`: local Markdown fallback retriever.
+- `reciprocal_rank_fusion`: RRF result fusion.
+- `LightweightRunbookReranker`: rule-based reranker.
+- `RetrievalService`: workflow-facing entry point.
+- `RunbookChunk`: shared retrieval result model.
+
+`RetrievalService` uses `HybridRunbookRetriever` by default. The hybrid retriever calls Milvus vector retrieval and BM25-like keyword retrieval, fuses the two ranked result lists with Reciprocal Rank Fusion, and then applies a lightweight rule-based rerank before returning the final topK chunks. If the hybrid retriever itself fails, `RetrievalService` still falls back to `KeywordRunbookRetriever`.
+
+The Milvus retriever:
+
+- Embeds the query with `text-embedding-v4`.
+- Uses embedding dimension `1024`.
+- Searches collection `faultlab_runbook_chunks`.
+- Applies faultType filtering.
+- Returns `RunbookChunk` objects to the hybrid retriever.
+
+The BM25-like keyword retriever:
+
+- Reads local Markdown files only.
+- Parses `docId`, `title`, `faultType`, and `keywords`.
+- Splits content by second-level headings (`##`) into sections.
+- Applies strong filtering by `ruleResult.faultType` or `experiment.scenarioCode`.
+- Extracts keywords from rule reason, rule evidence, metrics, and trace summary.
+- Scores title, section, content, and runbook keywords with BM25-like keyword scoring.
+- Returns the top matching chunks.
+
+The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, document length normalization, title/section/keyword boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
+
+The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, operational sections such as troubleshooting and fixes, evidence metrics, metric keywords, and chunks found by both vector and keyword retrieval.
+
+This version does not include FAISS, Elasticsearch, LangChain, LangGraph, MCP, Tool Calling, or a dedicated rerank model.
+
+Future upgrades can add:
+
+- standard BM25
+- BGE reranker or Alibaba Cloud Bailian rerank
+- more retrieval evaluation cases
+- nDCG
+- faultType grouped metrics
+- retrieval result visualization
+- CI regression evaluation
+- Runbook management UI
+
+## RAG Retrieval Evaluation
+
+RAG Retrieval Evaluation measures only the Runbook retrieval stage. It does not call the LLM, diagnosis workflow, Java backend, or frontend.
+
+The evaluation dataset is stored at:
+
+```text
+evaluation/rag_eval_cases.json
+```
+
+Each case defines a scenario query and expected `docId + section` references. The current metrics are:
+
+- `Hit@K`: whether any expected `docId + section` appears in topK.
+- `Recall@K`: matched expected references divided by total expected references.
+- `MRR`: reciprocal rank of the first matched expected reference.
+
+Evaluate retrieval through the AI Service endpoint:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+```
+
+Request body is optional:
+
+```json
+{
+  "retriever": "hybrid",
+  "topK": 3
+}
+```
+
+Supported `retriever` values are `bm25`, `hybrid`, `milvus`, and `all`. BM25 uses local Markdown only. Hybrid uses Milvus plus BM25 and will still return BM25 results if Milvus is unavailable. Pure Milvus evaluation returns a structured error when Milvus or embeddings are unavailable.
+
+Run from the command line:
+
+```bash
+python scripts/evaluate_retrieval.py --retriever hybrid --top-k 3
+python scripts/evaluate_retrieval.py --retriever all --top-k 3
+```
+
+The output includes summary metrics and each case's retrieved `docId + section`.
+
+Generate a Markdown report:
+
+```bash
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
+```
+
+Generated Markdown reports under `evaluation/reports/*.md` are ignored by Git by default. The directory is kept with `evaluation/reports/.gitkeep`.
+
+The evaluation API can also include a Markdown report while keeping `application/json` responses:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "all", "topK": 3, "report": true}
+```
+
+When `report=true`, the response includes `markdownReport`. The report contains:
+
+- Overall Metrics
+- Retriever Comparison
+- Metrics By Fault Type
+- Case Details
+- Miss Cases
+- Optimization Suggestions
+
+The optimization suggestions are rule-based and do not call an LLM. Current reporting limits: no nDCG, no visualization UI, and no CI regression gate.
+
+## RAG v0.5 Documentation
+
+当前 AI Service 的 RAG 阶段定位为 `v0.5 RAG Demo`。核心链路是：
+
+```text
+Runbook Markdown
+  -> section chunking
+  -> embedding
+  -> Milvus index
+  -> Evidence Package
+  -> Hybrid Retrieval
+  -> RRF fusion
+  -> lightweight rerank
+  -> Runbook Context
+  -> PromptBuilder
+  -> LLM diagnosis
+  -> runbookReferences validation
+  -> Retrieval Evaluation Report
+```
+
+详细文档：
+
+- [RAG v0.5 Demo Guide](../docs/rag-v0.5-demo-guide.md)
+- [RAG Architecture](../docs/rag-architecture.md)
+- [RAG Evaluation Guide](../docs/rag-evaluation-guide.md)
+- [RAG Interview Guide](../docs/rag-interview-guide.md)
+
+边界说明：
+
+- BM25-like keyword retrieval 不是标准搜索引擎级 BM25。
+- lightweight rerank 是规则型排序，不是真实 rerank 模型。
+- 当前没有 Runbook 管理后台、可视化评测 UI 或 CI regression gate。
+- 当前索引状态使用本地 JSON，不适合多实例生产共享状态。
+
+## Configuration
+
+Only `DASHSCOPE_API_KEY` is required as an environment variable:
 
 ```bash
 DASHSCOPE_API_KEY=your-bailian-api-key
 ```
 
-其他 LLM 配置使用 `app/config.py` 中的代码默认值，包括：
+Other LLM settings use defaults in `app/config.py`, including:
 
 - `dashscope_base_url`
 - `llm_enabled`
@@ -33,20 +209,84 @@ DASHSCOPE_API_KEY=your-bailian-api-key
 - `llm_fast_model`
 - `llm_reasoning_model`
 - `llm_long_context_model`
+- `embedding_model`
+- `embedding_dimension`
+- `milvus_host`
+- `milvus_port`
+- `milvus_collection_name`
+- `retrieval_mode`
+- `hybrid_rrf_k`
+- `hybrid_vector_top_k`
+- `hybrid_bm25_top_k`
+- `retrieval_top_k`
+- `rerank_enabled`
 
-模型名称以 `app/config.py` 当前值为准。后续如果需要调整模型，直接修改该文件即可。
+Only `DASHSCOPE_API_KEY` is read from the environment. Milvus and embedding settings currently use code defaults in `app/config.py`.
+
+## Runbook Indexing
+
+Start Milvus from Docker Compose, then index local runbooks:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+```
+
+Request body is optional:
+
+```json
+{
+  "forceRebuild": false
+}
+```
+
+Response:
+
+```json
+{
+  "status": "success",
+  "collectionName": "faultlab_runbook_chunks",
+  "indexedCount": 12,
+  "skippedCount": 0,
+  "deletedCount": 0,
+  "failedCount": 0,
+  "indexedDocuments": ["mq-backlog", "thread-pool-saturation", "idempotency-conflict"],
+  "skippedDocuments": [],
+  "failedDocuments": [],
+  "forceRebuild": false
+}
+```
+
+RAG indexing governance Basic:
+
+- Calculates a SHA-256 content hash for each Markdown Runbook.
+- Skips unchanged documents on repeated indexing.
+- Deletes old Milvus chunks and reindexes when a document changes.
+- Cleans old Milvus chunks when a Runbook Markdown file is removed.
+- Supports `forceRebuild=true` to rebuild all documents.
+- Stores index state in `faultlab-ai-service/data/runbook_index_state.json`.
+
+`runbook_index_state.json` is a runtime file and must not be committed. Indexing is explicit; the service does not index runbooks during startup.
+
+Current indexing limitations:
+
+- No MySQL index state table.
+- No management UI.
+- No scheduled scanner.
+- No async indexing queue.
+- No rollback mechanism.
+- No dedicated rerank model.
 
 ## ModelRouter
 
-`ModelRouter` 根据诊断证据复杂度选择模型：
+`ModelRouter` chooses a model based on diagnosis complexity:
 
-- `ruleResult` 缺失或 `matched=false`：fast model
-- Trace 节点数较多：reasoning model
-- 规则证据数量较多：reasoning model
-- Metrics 数量较多：long context model
-- 普通诊断：default model
+- missing `ruleResult` or `matched=false`: fast model
+- large trace tree: reasoning model
+- rich rule evidence: reasoning model
+- many metrics: long-context model
+- default diagnosis: default model
 
-模型选择结果只记录到服务日志，不修改对外响应结构。
+The selected model is logged only. It does not change the external API response structure.
 
 ## Install
 
@@ -81,22 +321,22 @@ Response:
 POST http://localhost:8000/ai/diagnosis/generate
 ```
 
-请求体是 Java 后端组装的 Evidence Package，包含：
+The request body is the Evidence Package assembled by the Java backend:
 
 - `experiment`
 - `metrics`
 - `traceTree`
 - `ruleResult`
 
-响应是固定结构的 `DiagnosisResponse`：
+The response is a fixed `DiagnosisResponse`:
 
 ```json
 {
   "experimentId": "exp_xxx",
   "faultType": "MQ_BACKLOG",
-  "faultName": "MQ 消息堆积",
+  "faultName": "MQ backlog",
   "confidence": 0.85,
-  "summary": "本次实验检测到 MQ 消息堆积风险。",
+  "summary": "The evidence indicates an MQ backlog risk.",
   "phenomenon": [],
   "evidence": [],
   "rootCauses": [],
@@ -108,24 +348,76 @@ POST http://localhost:8000/ai/diagnosis/generate
 
 ## Fallback
 
-以下情况会自动返回降级报告：
+Fallback returns a displayable rule-based report when:
 
-- 未配置 `DASHSCOPE_API_KEY`
+- `DASHSCOPE_API_KEY` is not configured
 - `settings.llm_enabled=False`
-- LLM 调用超时或异常
-- LLM 返回空内容
-- LLM 返回非 JSON
-- JSON 结构不符合预期
+- LLM call times out or raises
+- LLM returns empty content
+- LLM returns non-JSON content
+- JSON structure is invalid
 
-降级报告会尽量保留 `ruleResult.evidence` 和 `ruleResult.suggestions`，方便前端继续展示。
+Fallback reports keep `ruleResult.evidence` and `ruleResult.suggestions` when available.
 
-## Not Included Yet
+Runbook retrieval fallback is separate from diagnosis fallback. If Milvus retrieval or embedding fails, hybrid retrieval continues with BM25-like keyword results. If the hybrid retriever itself fails, diagnosis continues with `KeywordRunbookRetriever`.
 
-- Runbook RAG
-- LangGraph
-- MCP
-- 向量库
-- Tool Calling
+## Local Verification
+
+1. Confirm `DASHSCOPE_API_KEY` is configured.
+2. Start Docker Compose from `deploy/`:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+3. Start the service:
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+4. Build the Runbook index for the first time:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+```
+
+5. Verify `indexedCount > 0`.
+6. Call the same endpoint again and verify `indexedCount = 0` and `skippedCount > 0`.
+7. Force rebuild:
+
+```text
+POST http://localhost:8000/ai/runbooks/index
+body: {"forceRebuild": true}
+```
+
+8. Modify one Markdown file under `runbooks/`, index again, and verify only the changed document is rebuilt.
+9. Delete one Markdown file locally, index again, and verify old chunks are deleted and the state entry is removed.
+10. Call diagnosis:
+
+```text
+POST http://localhost:8000/ai/diagnosis/generate
+```
+
+11. Use an `MQ_BACKLOG` Evidence Package.
+12. Verify `fallback=false` when the LLM call succeeds.
+13. Verify logs show `MilvusRunbookRetriever` and `Bm25RunbookRetriever` retrieving Runbook chunks.
+14. Verify logs show RRF fusion and `LightweightRunbookReranker` execution.
+15. Verify `runbookReferences` contains only valid retrieved references.
+16. Stop Milvus and call diagnosis again to verify keyword-only retrieval still provides Runbook context.
+17. Run BM25 retrieval evaluation:
+
+```bash
+python scripts/evaluate_retrieval.py --retriever bm25 --top-k 3
+```
+
+18. Or call the evaluation API:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "all", "topK": 3}
+```
 
 ## Test
 
