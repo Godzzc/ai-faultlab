@@ -157,6 +157,40 @@ When `report=true`, the response includes `markdownReport`. The report contains:
 
 The optimization suggestions are rule-based and do not call an LLM. Current reporting limits: no nDCG, no visualization UI, and no CI regression gate.
 
+## RAG v0.5 Documentation
+
+当前 AI Service 的 RAG 阶段定位为 `v0.5 RAG Demo`。核心链路是：
+
+```text
+Runbook Markdown
+  -> section chunking
+  -> embedding
+  -> Milvus index
+  -> Evidence Package
+  -> Hybrid Retrieval
+  -> RRF fusion
+  -> lightweight rerank
+  -> Runbook Context
+  -> PromptBuilder
+  -> LLM diagnosis
+  -> runbookReferences validation
+  -> Retrieval Evaluation Report
+```
+
+详细文档：
+
+- [RAG v0.5 Demo Guide](../docs/rag-v0.5-demo-guide.md)
+- [RAG Architecture](../docs/rag-architecture.md)
+- [RAG Evaluation Guide](../docs/rag-evaluation-guide.md)
+- [RAG Interview Guide](../docs/rag-interview-guide.md)
+
+边界说明：
+
+- BM25-like keyword retrieval 不是标准搜索引擎级 BM25。
+- lightweight rerank 是规则型排序，不是真实 rerank 模型。
+- 当前没有 Runbook 管理后台、可视化评测 UI 或 CI regression gate。
+- 当前索引状态使用本地 JSON，不适合多实例生产共享状态。
+
 ## Configuration
 
 Only `DASHSCOPE_API_KEY` is required as an environment variable:

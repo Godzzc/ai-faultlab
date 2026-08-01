@@ -285,6 +285,56 @@ Markdown reports include Overall Metrics, Retriever Comparison, Metrics By Fault
 
 BM25 evaluation uses local Markdown only. Hybrid and Milvus evaluation need Milvus and embedding dependencies; when a retriever fails in `all`, the report includes that retriever's error and continues with the rest. Report suggestions are rule-based and do not call the LLM. Current limits: no nDCG, no visualization UI, and no CI regression gate.
 
+## RAG v0.5 Demo
+
+完整演示文档见 [RAG v0.5 Demo Guide](./rag-v0.5-demo-guide.md)。架构说明见 [RAG Architecture](./rag-architecture.md)，评测说明见 [RAG Evaluation Guide](./rag-evaluation-guide.md)，面试复盘见 [RAG Interview Guide](./rag-interview-guide.md)。
+
+本地演示建议顺序：
+
+1. 启动 Docker Compose，确认 MySQL、Redis、RabbitMQ、Milvus 均启动。
+2. 启动 Java Backend、Python AI Service 和 Vue Frontend。
+3. 配置 `DASHSCOPE_API_KEY`。
+4. 调用 `/ai/runbooks/index` 构建 Runbook 索引。
+5. 再次调用 `/ai/runbooks/index`，确认 `indexedCount=0`、`skippedCount>0`。
+6. 使用 `{"forceRebuild":true}` 演示强制重建。
+7. 在前端运行 `MQ_BACKLOG` 实验，执行规则诊断并生成 AI 诊断报告。
+8. 查看 AI Report 中的 `runbookReferences`。
+9. 运行 retrieval evaluation 并输出 Markdown report。
+10. 停止 `milvus-standalone`，再次诊断，验证 keyword-only fallback 不让诊断接口直接 500。
+
+索引命令：
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index" -ContentType "application/json" -Body '{}'
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index" -ContentType "application/json" -Body '{"forceRebuild":true}'
+```
+
+评测命令：
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
+```
+
+API 评测并返回 Markdown report：
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/evaluate" -ContentType "application/json" -Body '{"retriever":"all","topK":3,"report":true}'
+```
+
+Milvus fallback 演示：
+
+```powershell
+cd deploy
+docker compose stop milvus-standalone
+# 再次调用诊断，观察 AI Service 日志中的 vector retrieval failure 和 BM25-like fallback。
+docker compose start milvus-standalone
+```
+
+当前是 v0.5 RAG Demo，不是生产级平台。演示时不要把 BM25-like 描述成标准 BM25，不要把 lightweight rerank 描述成真实 rerank 模型，也不要说已经具备 Runbook 管理后台、可视化评测 UI 或 CI regression gate。
+
 ## Notes
 
 - 不要提交 `deploy/.env`、真实 API Key、`.env`、`.venv`。
