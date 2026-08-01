@@ -19,6 +19,7 @@ class RunbookIndexRequest(BaseModel):
 class RunbookEvaluateRequest(BaseModel):
     retriever: str = "hybrid"
     topK: int = 3
+    report: bool = False
 
 
 @app.get("/ai/health")
@@ -50,6 +51,6 @@ def index_runbooks(request: RunbookIndexRequest | None = None) -> dict[str, Any]
 def evaluate_runbooks(request: RunbookEvaluateRequest | None = None) -> dict[str, Any]:
     payload = request or RunbookEvaluateRequest()
     try:
-        return evaluate_retrievers(payload.retriever, payload.topK)
+        return evaluate_retrievers(payload.retriever, payload.topK, report=payload.report)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

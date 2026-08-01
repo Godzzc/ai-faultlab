@@ -9,6 +9,7 @@ from app.evaluation.models import (
     RetrievalEvalResult,
     RetrievalEvalSummary,
 )
+from app.evaluation.report_generator import RetrievalEvaluationReportGenerator
 from app.retrieval.base import BaseRunbookRetriever
 from app.retrieval.bm25_runbook_retriever import Bm25RunbookRetriever
 from app.retrieval.hybrid_runbook_retriever import HybridRunbookRetriever
@@ -165,6 +166,7 @@ def evaluate_retrievers(
     retriever: str = "hybrid",
     top_k: int = DEFAULT_TOP_K,
     evaluator: RetrievalEvaluator | None = None,
+    report: bool = False,
 ) -> dict[str, Any]:
     evaluator = evaluator or RetrievalEvaluator()
     top_k = top_k or DEFAULT_TOP_K
@@ -182,5 +184,19 @@ def evaluate_retrievers(
             })
 
     if (retriever or "hybrid").lower() == "all":
-        return {"summaries": outputs}
-    return outputs[0]
+        response = {"summaries": outputs}
+    else:
+        response = outputs[0]
+
+    if report:
+        summaries = summary_dicts_to_models(outputs)
+        response["markdownReport"] = RetrievalEvaluationReportGenerator().generate_markdown_report(summaries)
+    return response
+
+
+def summary_dicts_to_models(items: list[dict[str, Any]]) -> list[RetrievalEvalSummary]:
+    return [
+        RetrievalEvalSummary.model_validate(item)
+        for item in items
+        if not item.get("error")
+    ]

@@ -329,9 +329,20 @@ Command line:
 cd faultlab-ai-service
 python scripts/evaluate_retrieval.py --retriever hybrid --top-k 3
 python scripts/evaluate_retrieval.py --retriever all --top-k 3
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report
+python scripts/evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
 ```
 
-Future extensions can add more cases, nDCG, faultType grouped metrics, retrieval result visualization, and CI regression evaluation.
+Markdown reports include Overall Metrics, Retriever Comparison, Metrics By Fault Type, Case Details, Miss Cases, and Optimization Suggestions.
+
+The API can also include a Markdown report while still returning `application/json`:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "all", "topK": 3, "report": true}
+```
+
+The report suggestions are rule-based and do not call the LLM. Future extensions can add more cases, nDCG, retrieval result visualization, and CI regression evaluation.
 
 ## License
 
