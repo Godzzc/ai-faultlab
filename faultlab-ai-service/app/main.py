@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from app.config import settings
+from app.evaluation.retrieval_evaluator import evaluate_retrievers
 from app.retrieval.runbook_indexer import RunbookIndexer
 from app.schemas import DiagnosisRequest, DiagnosisResponse
 from app.workflow import run_diagnosis_workflow
@@ -13,6 +14,11 @@ app = FastAPI(title=settings.service_name)
 
 class RunbookIndexRequest(BaseModel):
     forceRebuild: bool = False
+
+
+class RunbookEvaluateRequest(BaseModel):
+    retriever: str = "hybrid"
+    topK: int = 3
 
 
 @app.get("/ai/health")
@@ -38,3 +44,12 @@ def index_runbooks(request: RunbookIndexRequest | None = None) -> dict[str, Any]
             status_code=500,
             detail=f"Runbook indexing failed: {exc}",
         ) from exc
+
+
+@app.post("/ai/runbooks/evaluate")
+def evaluate_runbooks(request: RunbookEvaluateRequest | None = None) -> dict[str, Any]:
+    payload = request or RunbookEvaluateRequest()
+    try:
+        return evaluate_retrievers(payload.retriever, payload.topK)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

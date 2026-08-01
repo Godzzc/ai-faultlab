@@ -230,9 +230,55 @@ Common issues:
 - Vector dimension mismatch: recreate the Milvus collection after changing `embedding_dimension`.
 - Hybrid logs should include vector result count, BM25 result count, fused result count, and final result count.
 
-Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, no dedicated rerank model, and no retrieval evaluation dataset. The keyword scoring is BM25-like and dependency-free, not a full search-engine BM25 implementation. The reranker is rule-based and does not call a rerank model.
+Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, and no dedicated rerank model. The keyword scoring is BM25-like and dependency-free, not a full search-engine BM25 implementation. The reranker is rule-based and does not call a rerank model.
 
 Do not commit `faultlab-ai-service/data/runbook_index_state.json`; it is generated at runtime.
+
+## RAG Retrieval Evaluation
+
+The Python AI Service includes a retrieval-only evaluation runner for Runbook RAG. It does not call the LLM, Java backend, or frontend.
+
+Dataset:
+
+```text
+faultlab-ai-service/evaluation/rag_eval_cases.json
+```
+
+Metrics:
+
+- Hit@K
+- Recall@K
+- MRR
+
+Start the AI Service:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Call the evaluation endpoint:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "bm25", "topK": 3}
+```
+
+Other supported request bodies:
+
+```text
+{"retriever": "hybrid", "topK": 3}
+{"retriever": "all", "topK": 3}
+```
+
+Run from the command line:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3
+```
+
+BM25 evaluation uses local Markdown only. Hybrid and Milvus evaluation need Milvus and embedding dependencies; when a retriever fails in `all`, the report includes that retriever's error and continues with the rest. Future extensions can add more cases, nDCG, faultType grouped metrics, retrieval result visualization, and CI regression evaluation.
 
 ## Notes
 

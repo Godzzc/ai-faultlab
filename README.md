@@ -211,6 +211,7 @@ Python AI Service：
 
 - `GET /ai/health`
 - `POST /ai/diagnosis/generate`
+- `POST /ai/runbooks/evaluate`
 
 ## v0.3 演示流程
 
@@ -295,7 +296,42 @@ Common issues:
 - `DASHSCOPE_API_KEY` missing: embedding and LLM calls cannot run; diagnosis uses fallback where applicable.
 - Vector dimension mismatch: confirm `settings.embedding_dimension` matches the Milvus collection schema, then recreate the collection if needed.
 
-Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, no dedicated rerank model, and no retrieval evaluation dataset. The keyword retriever is BM25-like and dependency-free, not a full search-engine BM25 implementation. The reranker is rule-based and does not call a rerank model.
+Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, and no dedicated rerank model. The keyword retriever is BM25-like and dependency-free, not a full search-engine BM25 implementation. The reranker is rule-based and does not call a rerank model.
+
+## RAG Retrieval Evaluation
+
+`faultlab-ai-service` includes a basic RAG retrieval evaluation runner for measuring Runbook retrieval quality without calling the LLM.
+
+Dataset:
+
+```text
+faultlab-ai-service/evaluation/rag_eval_cases.json
+```
+
+Metrics:
+
+- Hit@K
+- Recall@K
+- MRR
+
+Evaluation API:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "hybrid", "topK": 3}
+```
+
+Supported retrievers are `bm25`, `hybrid`, `milvus`, and `all`. BM25 mode reads local Markdown runbooks only. Hybrid and Milvus require vector retrieval dependencies to be available; if a retriever fails during `all`, the response includes that retriever's error and continues evaluating the others.
+
+Command line:
+
+```bash
+cd faultlab-ai-service
+python scripts/evaluate_retrieval.py --retriever hybrid --top-k 3
+python scripts/evaluate_retrieval.py --retriever all --top-k 3
+```
+
+Future extensions can add more cases, nDCG, faultType grouped metrics, retrieval result visualization, and CI regression evaluation.
 
 ## License
 
