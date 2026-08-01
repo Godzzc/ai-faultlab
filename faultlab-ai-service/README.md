@@ -16,6 +16,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Keeps keyword-only retrieval available when Milvus or embedding is unavailable.
 - Injects retrieved Runbook Context into the diagnosis prompt.
 - Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
+- Supports RAG Retrieval Evaluation with Hit@K, Recall@K, and MRR.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
 - Supports basic `ModelRouter` model selection.
 - Parses and validates LLM JSON output.
@@ -73,15 +74,60 @@ The current BM25 implementation is intentionally lightweight and dependency-free
 
 The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, operational sections such as troubleshooting and fixes, evidence metrics, metric keywords, and chunks found by both vector and keyword retrieval.
 
-This version does not include FAISS, Elasticsearch, LangChain, LangGraph, MCP, Tool Calling, a dedicated rerank model, or a retrieval evaluation dataset.
+This version does not include FAISS, Elasticsearch, LangChain, LangGraph, MCP, Tool Calling, or a dedicated rerank model.
 
 Future upgrades can add:
 
 - standard BM25
 - BGE reranker or Alibaba Cloud Bailian rerank
-- retrieval evaluation
-- recall@k / MRR
+- more retrieval evaluation cases
+- nDCG
+- faultType grouped metrics
+- retrieval result visualization
+- CI regression evaluation
 - Runbook management UI
+
+## RAG Retrieval Evaluation
+
+RAG Retrieval Evaluation measures only the Runbook retrieval stage. It does not call the LLM, diagnosis workflow, Java backend, or frontend.
+
+The evaluation dataset is stored at:
+
+```text
+evaluation/rag_eval_cases.json
+```
+
+Each case defines a scenario query and expected `docId + section` references. The current metrics are:
+
+- `Hit@K`: whether any expected `docId + section` appears in topK.
+- `Recall@K`: matched expected references divided by total expected references.
+- `MRR`: reciprocal rank of the first matched expected reference.
+
+Evaluate retrieval through the AI Service endpoint:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+```
+
+Request body is optional:
+
+```json
+{
+  "retriever": "hybrid",
+  "topK": 3
+}
+```
+
+Supported `retriever` values are `bm25`, `hybrid`, `milvus`, and `all`. BM25 uses local Markdown only. Hybrid uses Milvus plus BM25 and will still return BM25 results if Milvus is unavailable. Pure Milvus evaluation returns a structured error when Milvus or embeddings are unavailable.
+
+Run from the command line:
+
+```bash
+python scripts/evaluate_retrieval.py --retriever hybrid --top-k 3
+python scripts/evaluate_retrieval.py --retriever all --top-k 3
+```
+
+The output includes summary metrics and each case's retrieved `docId + section`.
 
 ## Configuration
 
@@ -166,7 +212,6 @@ Current indexing limitations:
 - No scheduled scanner.
 - No async indexing queue.
 - No rollback mechanism.
-- No retrieval evaluation dataset.
 - No dedicated rerank model.
 
 ## ModelRouter
@@ -299,6 +344,18 @@ POST http://localhost:8000/ai/diagnosis/generate
 14. Verify logs show RRF fusion and `LightweightRunbookReranker` execution.
 15. Verify `runbookReferences` contains only valid retrieved references.
 16. Stop Milvus and call diagnosis again to verify keyword-only retrieval still provides Runbook context.
+17. Run BM25 retrieval evaluation:
+
+```bash
+python scripts/evaluate_retrieval.py --retriever bm25 --top-k 3
+```
+
+18. Or call the evaluation API:
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+body: {"retriever": "all", "topK": 3}
+```
 
 ## Test
 

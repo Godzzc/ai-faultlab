@@ -1,0 +1,281 @@
+[
+  {
+    "caseId": "mq_backlog_core_metrics",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "生产消息数大于消费消息数，且消费耗时较高，疑似 MQ 消息堆积。",
+        "evidence": [
+          "publishCount=10",
+          "consumeCount=1",
+          "backlogCount=9",
+          "avgConsumeMs=5000"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "publishCount",
+          "metricValue": "10",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "consumeCount",
+          "metricValue": "1",
+          "component": "RabbitMQ"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "mq_backlog_root_causes",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "消费者处理逻辑耗时过长，消费速度跟不上生产速度。",
+        "evidence": [
+          "avgConsumeMs=4500",
+          "consumerDelayMs=4000",
+          "backlogCount=20"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "avgConsumeMs",
+          "metricValue": "4500",
+          "component": "RabbitMQ"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "mq_backlog_suggestions",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "需要增加消费者并发、优化慢消费逻辑并处理死信队列。",
+        "evidence": [
+          "consumeCount=1",
+          "backlogCount=30",
+          "avgConsumeMs=6000"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "backlogCount",
+          "metricValue": "30",
+          "component": "RabbitMQ"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_rejection",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "活跃线程数打满且出现 rejectedTaskCount，线程池已经无法继续接收任务。",
+        "evidence": [
+          "activeThreadCount=16",
+          "maximumPoolSize=16",
+          "rejectedTaskCount=3"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "rejectedTaskCount",
+          "metricValue": "3",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "核心指标"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_queue_backlog",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "queueSize 持续增长，任务处理速度低于提交速度，需要检查线程池参数和队列长度。",
+        "evidence": [
+          "queueSize=80",
+          "taskCount=100",
+          "acceptedTaskCount=80"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "queueSize",
+          "metricValue": "80",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_slow_task",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "avgTaskDurationMs 和 taskSleepMs 较高，长耗时任务占用线程，需要优化慢任务并拆分长任务。",
+        "evidence": [
+          "avgTaskDurationMs=5000",
+          "taskSleepMs=5000",
+          "activeThreadCount=16"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "avgTaskDurationMs",
+          "metricValue": "5000",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_request_hash_conflict",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "同一个 Idempotency-Key 对应不同 requestHash，属于典型幂等冲突。",
+        "evidence": [
+          "requestCount=5",
+          "hashMismatchCount=1",
+          "conflictCount=1"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "hashMismatchCount",
+          "metricValue": "1",
+          "component": "Redis"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "核心指标"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_setnx_duplicate",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "redisSetNxFailCount 增加，说明重复请求命中已有幂等 key，需要检查 SETNX 结果和幂等记录状态。",
+        "evidence": [
+          "duplicateCount=3",
+          "redisSetNxFailCount=3",
+          "rejectedDuplicateCount=3"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "redisSetNxFailCount",
+          "metricValue": "3",
+          "component": "Redis"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_db_unique_index",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "只依赖 Redis 防重缺少数据库唯一索引兜底，Redis 异常时可能产生重复数据。",
+        "evidence": [
+          "redisErrorCount=1",
+          "duplicateCount=2",
+          "unique index missing"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "redisErrorCount",
+          "metricValue": "1",
+          "component": "Redis"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "修复建议"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "风险提示"
+      }
+    ]
+  }
+]
