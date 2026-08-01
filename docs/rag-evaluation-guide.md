@@ -1,0 +1,186 @@
+# AI FaultLab RAG Evaluation Guide
+
+本文档说明 AI FaultLab 当前 RAG v0.5 的检索评测能力。评测只覆盖 retrieval，不调用 LLM，不修改诊断主流程。
+
+## 1. 为什么需要 RAG Evaluation
+
+RAG 链路不能只靠人工观察“看起来像召回了相关内容”。如果缺少评测，很难回答这些问题：
+
+- 某类故障是否召回了正确 Runbook section。
+- Hybrid retrieval 是否比单路召回更稳定。
+- 修改 Runbook、query construction、RRF 参数或 rerank 权重后，效果是否退化。
+
+因此当前引入一个小型、可扩展的 retrieval evaluation dataset，用指标对召回结果做基础量化。
+
+## 2. 当前评测数据集
+
+评测数据集位置：
+
+```text
+faultlab-ai-service/evaluation/rag_eval_cases.json
+```
+
+当前包含 9 个 case，覆盖：
+
+- `MQ_BACKLOG`
+- `THREAD_POOL_SATURATION`
+- `IDEMPOTENCY_CONFLICT`
+
+每个 case 包含：
+
+- `caseId`
+- `scenarioCode`
+- query 中的 `ruleResult` 和 `metrics`
+- expected `docId + section`
+
+命中判断使用严格的 `docId + section`。例如：
+
+```json
+{
+  "docId": "mq-backlog",
+  "section": "核心指标"
+}
+```
+
+这意味着只召回同一个文档但 section 不对，不算完整命中。
+
+## 3. 指标定义
+
+### Hit@K
+
+topK 结果中只要命中任意 expected `docId + section`，该 case 的 hit 就是 1，否则是 0。
+
+### Recall@K
+
+topK 命中的 expected refs 数量 / expected refs 总数。
+
+如果一个 case 期望两个 section，只召回一个，则 Recall@K = 0.5。
+
+### MRR
+
+MRR 使用第一个命中的 expected ref 的倒数排名。
+
+例子：
+
+- 第一个结果命中：MRR = 1.0
+- 第二个结果命中：MRR = 0.5
+- 没有命中：MRR = 0
+
+## 4. API 评测
+
+接口：
+
+```text
+POST http://localhost:8000/ai/runbooks/evaluate
+```
+
+评测 BM25-like：
+
+```json
+{"retriever":"bm25","topK":3}
+```
+
+评测 Hybrid：
+
+```json
+{"retriever":"hybrid","topK":3}
+```
+
+评测全部并返回 Markdown 报告：
+
+```json
+{"retriever":"all","topK":3,"report":true}
+```
+
+`retriever=all` 会分别评测：
+
+- `bm25`
+- `hybrid`
+- `milvus`
+
+如果某个 retriever 失败，响应会包含该 retriever 的错误信息，不影响其他 retriever 的结果。
+
+## 5. CLI 评测
+
+进入 AI Service 目录：
+
+```powershell
+cd faultlab-ai-service
+```
+
+普通评测：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3
+```
+
+输出 Markdown 报告到控制台：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
+```
+
+输出 Markdown 报告到文件：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
+```
+
+生成的 `evaluation/reports/*.md` 默认不提交，目录通过 `.gitkeep` 保留。
+
+## 6. Markdown Report
+
+Markdown report 面向人工阅读、复盘和博客整理。报告包含：
+
+- Overview
+- Overall Metrics
+- Retriever Comparison
+- Metrics By Fault Type
+- Case Details
+- Miss Cases
+- Optimization Suggestions
+
+其中 Optimization Suggestions 是规则型建议，不调用 LLM。
+
+## 7. 如何解读评测结果
+
+### Hybrid 不一定每个 case 都最好
+
+Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-like 或 Milvus。评测时应看整体指标、按 faultType 分组指标，以及具体 miss case。
+
+### BM25-like miss 是 baseline signal
+
+如果 BM25-like 对某个 case miss，通常说明：
+
+- Runbook keywords 不够。
+- section 标题或正文没有覆盖指标名。
+- query 中的字段名和 Runbook 表达没有对齐。
+
+### Miss case 用于指导优化
+
+常见优化方向：
+
+- 补充 Runbook keywords。
+- 调整 section 标题。
+- 在 Runbook section 中增加专业指标名、英文别名和字段名。
+- 优化 query construction，让 Evidence 中的关键字段更稳定地进入 query。
+- 调整 RRF `k`、rerank 权重和 topK。
+
+## 8. 当前限制
+
+- case 数量少，目前只有 9 个。
+- 没有 nDCG。
+- 没有 CI regression gate。
+- Milvus evaluation 依赖 Milvus 和 embedding 可用。
+- 当前优化建议是规则型，不调用 LLM。
+- 当前 BM25-like 不是标准搜索引擎级 BM25。
+- 当前 lightweight rerank 不是真实 rerank 模型。
+
+## 9. 后续计划
+
+- 扩充 evaluation case。
+- 按 faultType 统计趋势。
+- 增加 nDCG。
+- 增加检索结果可视化。
+- 增加 CI 回归门禁。
+- 引入真实 rerank 模型后，与 lightweight rerank 做对比。

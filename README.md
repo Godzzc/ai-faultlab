@@ -344,6 +344,27 @@ body: {"retriever": "all", "topK": 3, "report": true}
 
 The report suggestions are rule-based and do not call the LLM. Future extensions can add more cases, nDCG, retrieval result visualization, and CI regression evaluation.
 
+## RAG v0.5 Documentation
+
+当前 RAG 阶段定位为 `v0.5 RAG Demo`，重点是把 Runbook 索引、Hybrid Retrieval、Prompt 注入、引用校验和检索评测串成闭环。它不是生产级 Runbook 管理平台。
+
+文档入口：
+
+- [RAG v0.5 Demo Guide](docs/rag-v0.5-demo-guide.md)：本地演示流程、索引演示、诊断演示、fallback 和评测报告演示。
+- [RAG Architecture](docs/rag-architecture.md)：总体架构、离线索引、在线检索、fallback 和关键模块职责。
+- [RAG Evaluation Guide](docs/rag-evaluation-guide.md)：评测数据集、Hit@K / Recall@K / MRR、API/CLI 用法和报告解读。
+- [RAG Interview Guide](docs/rag-interview-guide.md)：面试口述版本、常见追问、简历写法和项目亮点总结。
+
+当前 RAG v0.5 能力摘要：
+
+- Runbook Markdown section chunking。
+- 百炼 `text-embedding-v4` + Milvus vector retrieval。
+- BM25-like keyword retrieval，不是标准搜索引擎级 BM25。
+- RRF fusion + lightweight rule-based rerank，不是真实 rerank 模型。
+- content hash、forceRebuild、旧 chunk 清理等基础索引治理。
+- Prompt 注入 Runbook Context，服务端校验 `runbookReferences`。
+- RAG Evaluation 支持 Hit@K、Recall@K、MRR 和 Markdown Report。
+
 ## License
 
 MIT
