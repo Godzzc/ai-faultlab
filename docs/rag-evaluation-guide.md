@@ -21,6 +21,27 @@ The first GitHub Actions gate runs only BM25 retrieval, so it does not require M
 
 These thresholds are v0.5 baseline values, not production metrics. They can be raised later after the evaluation dataset becomes larger and more stable. When the gate fails, check Runbook keywords, section titles, query construction fields, BM25-like scoring, and accidental topK/RRF/rerank parameter changes.
 
+## RAG Retrieval Debug
+
+Use retrieval debug when an evaluation case misses and logs are not enough to understand the ranking path.
+
+API:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+CLI:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+```
+
+Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. It is useful for analyzing miss cases, query construction, Runbook keyword coverage, Milvus and BM25-like recall differences, RRF fusion, and lightweight rerank ordering changes.
+
+Current limits: no LLM call, no frontend UI, no visualization chart, no standard BM25, and no real rerank model. Milvus debug depends on Milvus and embedding availability. BM25 debug can run without Milvus.
+
 本文档说明 AI FaultLab 当前 RAG v0.5 的检索评测能力。评测只覆盖 retrieval，不调用 LLM，不修改诊断主流程。
 
 ## 1. 为什么需要 RAG Evaluation
