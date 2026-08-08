@@ -279,11 +279,33 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
 ```
 
 Markdown reports include Overall Metrics, Retriever Comparison, Metrics By Fault Type, Case Details, Miss Cases, and Optimization Suggestions. API report responses keep `application/json` and add `markdownReport`.
 
-BM25 evaluation uses local Markdown only. Hybrid and Milvus evaluation need Milvus and embedding dependencies; when a retriever fails in `all`, the report includes that retriever's error and continues with the rest. Report suggestions are rule-based and do not call the LLM. Current limits: no nDCG, no visualization UI, and no CI regression gate.
+BM25 evaluation uses local Markdown only. Hybrid and Milvus evaluation need Milvus and embedding dependencies; when a retriever fails in `all`, the report includes that retriever's error and continues with the rest. Report suggestions are rule-based and do not call the LLM. Current limits: no nDCG and no visualization UI.
+
+### RAG Evaluation Regression Gate
+
+Run the BM25-only regression gate locally:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
+```
+
+Thresholds are configured in:
+
+```text
+faultlab-ai-service/evaluation/rag_eval_thresholds.json
+```
+
+The current thresholds are the v0.5 baseline and are intentionally modest. The command prints `hitAtK`, `recallAtK`, `mrr`, thresholds, `passed`, and `failedMetrics`, then exits with `0` on pass or `1` on failure.
+
+GitHub Actions runs only the BM25 gate by default. It does not start Milvus and does not require `DASHSCOPE_API_KEY`. Hybrid and Milvus evaluation can still be run locally when Milvus and embeddings are available; a future integration environment can add a required hybrid gate.
+
+If the gate fails, check Runbook keyword coverage, section title changes, query construction fields, BM25-like scoring changes, and accidental topK/RRF/rerank parameter changes.
 
 ## RAG v0.5 Demo
 
@@ -333,7 +355,7 @@ docker compose stop milvus-standalone
 docker compose start milvus-standalone
 ```
 
-当前是 v0.5 RAG Demo，不是生产级平台。演示时不要把 BM25-like 描述成标准 BM25，不要把 lightweight rerank 描述成真实 rerank 模型，也不要说已经具备 Runbook 管理后台、可视化评测 UI 或 CI regression gate。
+当前是 v0.5 RAG Demo，不是生产级平台。演示时不要把 BM25-like 描述成标准 BM25，不要把 lightweight rerank 描述成真实 rerank 模型，也不要说已经具备 Runbook 管理后台、可视化评测 UI 或 hybrid required regression gate。
 
 ## Notes
 
