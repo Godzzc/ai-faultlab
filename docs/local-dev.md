@@ -280,6 +280,7 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
 .\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
 ```
 
 Markdown reports include Overall Metrics, Retriever Comparison, Metrics By Fault Type, Case Details, Miss Cases, and Optimization Suggestions. API report responses keep `application/json` and add `markdownReport`.
@@ -306,6 +307,26 @@ The current thresholds are the v0.5 baseline and are intentionally modest. The c
 GitHub Actions runs only the BM25 gate by default. It does not start Milvus and does not require `DASHSCOPE_API_KEY`. Hybrid and Milvus evaluation can still be run locally when Milvus and embeddings are available; a future integration environment can add a required hybrid gate.
 
 If the gate fails, check Runbook keyword coverage, section title changes, query construction fields, BM25-like scoring changes, and accidental topK/RRF/rerank parameter changes.
+
+### RAG Retrieval Debug
+
+Run debug for one evaluation case:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --no-content
+```
+
+The Debug API is:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+The output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to inspect miss cases, query construction, Milvus vs BM25-like recall, RRF fusion, and rerank ordering changes.
+
+This path does not call the LLM and has no frontend UI or visualization chart. BM25 debug works without Milvus. Vector debug requires Milvus and embeddings; when Milvus is unavailable, the response should still include BM25 results and a warning.
 
 ## RAG v0.5 Demo
 

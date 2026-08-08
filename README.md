@@ -363,6 +363,26 @@ cd faultlab-ai-service
 
 Hybrid and Milvus evaluation can still be run locally, but they depend on Milvus and embedding availability. If the regression gate fails, check whether Runbook keywords or section titles were weakened, query construction lost key fields, BM25-like scoring regressed, or topK/rerank/RRF parameters were changed by mistake.
 
+### RAG Retrieval Debug
+
+The AI service also exposes a retrieval-only debug path for inspecting one query across vector retrieval, BM25-like retrieval, RRF fusion, rerank, and final topK selection. It does not call the LLM and does not modify the diagnosis API.
+
+API:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+CLI:
+
+```bash
+cd faultlab-ai-service
+python scripts/debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+python scripts/debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --no-content
+```
+
+The debug response includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus; vector debug requires Milvus and embeddings to be available.
+
 ## RAG v0.5 Documentation
 
 当前 RAG 阶段定位为 `v0.5 RAG Demo`，重点是把 Runbook 索引、Hybrid Retrieval、Prompt 注入、引用校验和检索评测串成闭环。它不是生产级 Runbook 管理平台。

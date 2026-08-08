@@ -19,6 +19,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Supports RAG Retrieval Evaluation with Hit@K, Recall@K, and MRR.
 - Supports Markdown RAG Evaluation Report generation for human review and comparison.
 - Supports a RAG Evaluation Regression Gate for BM25-only CI checks.
+- Supports RAG Retrieval Debug for inspecting query, vector, BM25, fusion, rerank, and final results.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
 - Supports basic `ModelRouter` model selection.
 - Parses and validates LLM JSON output.
@@ -193,6 +194,43 @@ python scripts/check_rag_regression.py --retriever bm25
 ```
 
 When the gate fails, check Runbook keyword coverage, section title changes, query construction fields, BM25-like scoring changes, and accidental topK/RRF/rerank parameter changes.
+
+## RAG Retrieval Debug
+
+RAG Retrieval Debug runs only the retrieval chain and returns intermediate results for one Evidence Package or evaluation case. It does not call the LLM, PromptBuilder, Java backend, or frontend, and it does not write Milvus or index state.
+
+API:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+The request body is compatible with the diagnosis Evidence Package and adds:
+
+- `topK`: final top K results, default `3`.
+- `includeContent`: include chunk content in debug output, default `true`.
+
+Response fields:
+
+- `queryText`
+- `faultType`
+- `vectorResults`
+- `bm25Results`
+- `fusionResults`
+- `rerankResults`
+- `finalResults`
+- `fallbackReason`
+- `warnings`
+
+CLI:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --no-content
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --output evaluation/reports/debug_mq_backlog.json
+```
+
+Use this to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus. Vector debug depends on Milvus and embedding availability; if unavailable, debug output keeps BM25 results and records the vector failure in `warnings`.
 
 ## RAG v0.5 Documentation
 

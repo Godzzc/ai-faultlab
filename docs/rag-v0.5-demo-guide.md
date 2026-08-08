@@ -1,5 +1,22 @@
 # AI FaultLab RAG v0.5 Demo Guide
 
+## v0.5 Debug Update
+
+The RAG demo now includes a BM25 CI regression gate and a retrieval debug path:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+```
+
+Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes.
+
+Current limits still apply: no LLM call in debug mode, no frontend UI, no visualization chart, no standard BM25, no real rerank model, and no required hybrid gate in CI. Milvus debug depends on Milvus and embeddings; BM25 debug works without Milvus.
+
 本文档用于演示 AI FaultLab 当前 RAG v0.5 阶段能力。它面向本地演示、面试复盘和技术博客整理，不把当前能力描述为生产级平台。
 
 ## 1. Demo 目标
