@@ -1,0 +1,14 @@
+{
+  "bm25": {
+    "topK": 3,
+    "minHitAtK": 0.6,
+    "minRecallAtK": 0.45,
+    "minMRR": 0.35
+  },
+  "hybrid": {
+    "topK": 3,
+    "minHitAtK": 0.7,
+    "minRecallAtK": 0.55,
+    "minMRR": 0.55
+  }
+}

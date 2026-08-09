@@ -18,6 +18,8 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
 - Supports RAG Retrieval Evaluation with Hit@K, Recall@K, and MRR.
 - Supports Markdown RAG Evaluation Report generation for human review and comparison.
+- Supports a RAG Evaluation Regression Gate for BM25-only CI checks.
+- Supports RAG Retrieval Debug for inspecting query, vector, BM25, fusion, rerank, and final results.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
 - Supports basic `ModelRouter` model selection.
 - Parses and validates LLM JSON output.
@@ -85,7 +87,7 @@ Future upgrades can add:
 - nDCG
 - faultType grouped metrics
 - retrieval result visualization
-- CI regression evaluation
+- stricter CI regression thresholds
 - Runbook management UI
 
 ## RAG Retrieval Evaluation
@@ -155,7 +157,80 @@ When `report=true`, the response includes `markdownReport`. The report contains:
 - Miss Cases
 - Optimization Suggestions
 
-The optimization suggestions are rule-based and do not call an LLM. Current reporting limits: no nDCG, no visualization UI, and no CI regression gate.
+The optimization suggestions are rule-based and do not call an LLM. Current reporting limits: no nDCG and no visualization UI.
+
+## RAG Evaluation Regression Gate
+
+The regression gate evaluates a retriever, compares Hit@K, Recall@K, and MRR against a checked-in threshold file, and exits with a CI-friendly status code.
+
+Thresholds:
+
+```text
+evaluation/rag_eval_thresholds.json
+```
+
+The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. Raise them gradually after adding more evaluation cases and stabilizing retrieval behavior.
+
+Run BM25 locally:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
+```
+
+Optional arguments:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25 --top-k 3
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25 --thresholds evaluation/rag_eval_thresholds.json
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever hybrid
+```
+
+`bm25` uses local Markdown runbooks only and does not require Milvus or `DASHSCOPE_API_KEY`. `hybrid` and `milvus` remain available for local or integration environments, but they depend on Milvus and embedding availability. If those dependencies are unavailable, the regression script returns a clear failure instead of passing silently.
+
+GitHub Actions runs `python -m pytest` and the BM25-only gate:
+
+```bash
+python scripts/check_rag_regression.py --retriever bm25
+```
+
+When the gate fails, check Runbook keyword coverage, section title changes, query construction fields, BM25-like scoring changes, and accidental topK/RRF/rerank parameter changes.
+
+## RAG Retrieval Debug
+
+RAG Retrieval Debug runs only the retrieval chain and returns intermediate results for one Evidence Package or evaluation case. It does not call the LLM, PromptBuilder, Java backend, or frontend, and it does not write Milvus or index state.
+
+API:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+The request body is compatible with the diagnosis Evidence Package and adds:
+
+- `topK`: final top K results, default `3`.
+- `includeContent`: include chunk content in debug output, default `true`.
+
+Response fields:
+
+- `queryText`
+- `faultType`
+- `vectorResults`
+- `bm25Results`
+- `fusionResults`
+- `rerankResults`
+- `finalResults`
+- `fallbackReason`
+- `warnings`
+
+CLI:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --no-content
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --output evaluation/reports/debug_mq_backlog.json
+```
+
+Use this to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus. Vector debug depends on Milvus and embedding availability; if unavailable, debug output keeps BM25 results and records the vector failure in `warnings`.
 
 ## RAG v0.5 Documentation
 
@@ -188,7 +263,7 @@ Runbook Markdown
 
 - BM25-like keyword retrieval 不是标准搜索引擎级 BM25。
 - lightweight rerank 是规则型排序，不是真实 rerank 模型。
-- 当前没有 Runbook 管理后台、可视化评测 UI 或 CI regression gate。
+- 当前没有 Runbook 管理后台、可视化评测 UI 或 hybrid required regression gate。
 - 当前索引状态使用本地 JSON，不适合多实例生产共享状态。
 
 ## Configuration

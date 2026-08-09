@@ -1,5 +1,47 @@
 # AI FaultLab RAG Evaluation Guide
 
+## RAG Evaluation Regression Gate
+
+The regression gate compares retrieval metrics against a checked-in v0.5 baseline:
+
+```text
+faultlab-ai-service/evaluation/rag_eval_thresholds.json
+```
+
+Local command:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
+```
+
+The output includes `hitAtK`, `recallAtK`, `mrr`, each threshold, `passed`, and `failedMetrics`. The process exits with `0` when all metrics pass and `1` when any metric fails.
+
+The first GitHub Actions gate runs only BM25 retrieval, so it does not require Milvus, embeddings, or `DASHSCOPE_API_KEY`. Hybrid and Milvus evaluation can still be run locally, but they depend on Milvus and embedding availability and are not required by CI yet.
+
+These thresholds are v0.5 baseline values, not production metrics. They can be raised later after the evaluation dataset becomes larger and more stable. When the gate fails, check Runbook keywords, section titles, query construction fields, BM25-like scoring, and accidental topK/RRF/rerank parameter changes.
+
+## RAG Retrieval Debug
+
+Use retrieval debug when an evaluation case misses and logs are not enough to understand the ranking path.
+
+API:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+CLI:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+```
+
+Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. It is useful for analyzing miss cases, query construction, Runbook keyword coverage, Milvus and BM25-like recall differences, RRF fusion, and lightweight rerank ordering changes.
+
+Current limits: no LLM call, no frontend UI, no visualization chart, no standard BM25, and no real rerank model. Milvus debug depends on Milvus and embedding availability. BM25 debug can run without Milvus.
+
 本文档说明 AI FaultLab 当前 RAG v0.5 的检索评测能力。评测只覆盖 retrieval，不调用 LLM，不修改诊断主流程。
 
 ## 1. 为什么需要 RAG Evaluation
@@ -170,7 +212,7 @@ Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-l
 
 - case 数量少，目前只有 9 个。
 - 没有 nDCG。
-- 没有 CI regression gate。
+- hybrid gate 尚未作为 CI 必过项。
 - Milvus evaluation 依赖 Milvus 和 embedding 可用。
 - 当前优化建议是规则型，不调用 LLM。
 - 当前 BM25-like 不是标准搜索引擎级 BM25。

@@ -342,7 +342,46 @@ POST http://localhost:8000/ai/runbooks/evaluate
 body: {"retriever": "all", "topK": 3, "report": true}
 ```
 
-The report suggestions are rule-based and do not call the LLM. Future extensions can add more cases, nDCG, retrieval result visualization, and CI regression evaluation.
+The report suggestions are rule-based and do not call the LLM. Future extensions can add more cases, nDCG, retrieval result visualization, and stricter CI regression thresholds.
+
+### RAG Evaluation Regression Gate
+
+`faultlab-ai-service` includes a retrieval regression gate for PR and local checks. Thresholds live in:
+
+```text
+faultlab-ai-service/evaluation/rag_eval_thresholds.json
+```
+
+These thresholds are the v0.5 baseline and are intentionally modest; they can be raised later as the Runbook dataset and retrieval implementation mature. The first CI gate runs BM25-only retrieval so it does not require Milvus, embeddings, or `DASHSCOPE_API_KEY`.
+
+Local command:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
+```
+
+Hybrid and Milvus evaluation can still be run locally, but they depend on Milvus and embedding availability. If the regression gate fails, check whether Runbook keywords or section titles were weakened, query construction lost key fields, BM25-like scoring regressed, or topK/rerank/RRF parameters were changed by mistake.
+
+### RAG Retrieval Debug
+
+The AI service also exposes a retrieval-only debug path for inspecting one query across vector retrieval, BM25-like retrieval, RRF fusion, rerank, and final topK selection. It does not call the LLM and does not modify the diagnosis API.
+
+API:
+
+```text
+POST /ai/runbooks/retrieve/debug
+```
+
+CLI:
+
+```bash
+cd faultlab-ai-service
+python scripts/debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
+python scripts/debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --no-content
+```
+
+The debug response includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus; vector debug requires Milvus and embeddings to be available.
 
 ## RAG v0.5 Documentation
 

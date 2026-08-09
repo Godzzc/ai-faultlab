@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.evaluation.retrieval_evaluator import evaluate_retrievers
+from app.retrieval.debug_models import RetrievalDebugRequest, RetrievalDebugResponse
+from app.retrieval.debug_service import RetrievalDebugService
 from app.retrieval.runbook_indexer import RunbookIndexer
 from app.schemas import DiagnosisRequest, DiagnosisResponse
 from app.workflow import run_diagnosis_workflow
@@ -54,3 +56,14 @@ def evaluate_runbooks(request: RunbookEvaluateRequest | None = None) -> dict[str
         return evaluate_retrievers(payload.retriever, payload.topK, report=payload.report)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/ai/runbooks/retrieve/debug", response_model=RetrievalDebugResponse)
+def debug_retrieve_runbooks(request: RetrievalDebugRequest) -> RetrievalDebugResponse:
+    try:
+        return RetrievalDebugService().debug(request)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Runbook retrieval debug failed: {exc}",
+        ) from exc
