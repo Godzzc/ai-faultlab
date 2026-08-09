@@ -17,6 +17,25 @@ Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResult
 
 Current limits still apply: no LLM call in debug mode, no frontend UI, no visualization chart, no standard BM25, no real rerank model, and no required hybrid gate in CI. Milvus debug depends on Milvus and embeddings; BM25 debug works without Milvus.
 
+## v0.5 Runbook Management Update
+
+The AI service now exposes Runbook Management Basic and Index Task Basic while keeping the local Markdown design:
+
+```text
+GET /ai/runbooks
+GET /ai/runbooks/{docId}
+POST /ai/runbooks
+PUT /ai/runbooks/{docId}
+DELETE /ai/runbooks/{docId}
+POST /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks/{taskId}
+```
+
+`POST /ai/runbooks/index` remains compatible and now includes `taskId`. Index task records are stored in `data/runbook_index_tasks.json`; this runtime file should not be committed.
+
+Current limits: still no MySQL Runbook tables, no async indexing queue, no permissions, no audit log, and no version approval workflow.
+
 本文档用于演示 AI FaultLab 当前 RAG v0.5 阶段能力。它面向本地演示、面试复盘和技术博客整理，不把当前能力描述为生产级平台。
 
 ## 1. Demo 目标
