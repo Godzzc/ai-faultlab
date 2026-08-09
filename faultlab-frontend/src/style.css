@@ -37,7 +37,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -261,7 +262,23 @@ h3 {
   outline: none;
 }
 
+.field select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: var(--panel-soft);
+  color: var(--text);
+  outline: none;
+}
+
 .field input:focus {
+  border-color: var(--accent);
+  background: #ffffff;
+}
+
+.field select:focus {
   border-color: var(--accent);
   background: #ffffff;
 }
@@ -488,13 +505,219 @@ td {
   font-size: 13px;
 }
 
+.rag-console {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.rag-console-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.rag-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.rag-panel {
+  padding: 18px;
+}
+
+.rag-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 110px 150px 160px;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.rag-form.debug-form {
+  grid-template-columns: minmax(260px, 1fr) 110px 180px 170px;
+}
+
+.rag-form button {
+  min-height: 38px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  color: #475569;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.check-field input {
+  width: 16px;
+  height: 16px;
+}
+
+.rag-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.metric-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-card {
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+}
+
+.metric-card.failed {
+  border-color: #fecaca;
+  background: var(--danger-soft);
+}
+
+.metric-card span,
+.metric-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.metric-card span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.metric-card strong {
+  display: block;
+  margin: 8px 0 6px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.metric-card small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.rag-result-group {
+  display: grid;
+  gap: 10px;
+}
+
+.rag-table-wrap table {
+  min-width: 980px;
+}
+
+.markdown-report,
+.query-text,
+.metadata,
+.chunk-content {
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.markdown-report,
+.query-text {
+  max-height: 360px;
+  padding: 12px;
+}
+
+.metadata,
+.chunk-content {
+  max-height: 180px;
+  padding: 10px;
+}
+
+.warning-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #fcd34d;
+  border-radius: 7px;
+  background: #fffbeb;
+  color: var(--warning);
+}
+
+.warning-box strong {
+  font-size: 13px;
+}
+
+.debug-list {
+  display: grid;
+  gap: 10px;
+}
+
+.debug-chunk {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+}
+
+.debug-chunk-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.debug-chunk-head strong,
+.debug-chunk p,
+.debug-chunk small {
+  overflow-wrap: anywhere;
+}
+
+.debug-chunk-head strong {
+  color: #0f172a;
+}
+
+.debug-chunk-head span,
+.debug-chunk small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.debug-chunk p {
+  color: #334155;
+}
+
 @media (max-width: 1080px) {
   .dashboard {
     padding: 18px;
   }
 
   .layout,
-  .list-columns {
+  .list-columns,
+  .rag-form,
+  .rag-form.debug-form {
     grid-template-columns: 1fr;
   }
 
@@ -503,6 +726,10 @@ td {
   }
 
   .info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .metric-card-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -522,6 +749,15 @@ td {
   }
 
   .trace-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rag-console-header,
+  .debug-chunk-head {
+    display: grid;
+  }
+
+  .metric-card-grid {
     grid-template-columns: 1fr;
   }
 }

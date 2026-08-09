@@ -66,12 +66,110 @@ const loading = reactive({
 const errorMessage = ref('')
 const aiError = ref('')
 
+const evaluationForm = reactive({
+  retriever: 'all',
+  topK: 3,
+  report: true,
+})
+const evaluationLoading = ref(false)
+const evaluationError = ref('')
+const evaluationResult = ref(null)
+
+const ragDebugCases = {
+  mq_backlog_core_metrics: {
+    experiment: {
+      experimentId: 'mq_backlog_core_metrics',
+      scenarioCode: 'MQ_BACKLOG',
+      status: 'EVALUATING',
+      traceId: 'trace_mq_backlog_core_metrics',
+    },
+    metrics: [
+      { metricName: 'publishCount', metricValue: '10', metricUnit: 'count', component: 'RabbitMQ' },
+      { metricName: 'consumeCount', metricValue: '1', metricUnit: 'count', component: 'RabbitMQ' },
+      { metricName: 'avgConsumeMs', metricValue: '5000', metricUnit: 'ms', component: 'RabbitMQ' },
+    ],
+    traceTree: { traceId: 'trace_mq_backlog_core_metrics', roots: [] },
+    ruleResult: {
+      experimentId: 'mq_backlog_core_metrics',
+      faultType: 'MQ_BACKLOG',
+      faultName: 'MQ backlog',
+      confidence: 0.85,
+      matched: true,
+      reason: 'publishCount is higher than consumeCount and avgConsumeMs is high.',
+      evidence: ['publishCount=10', 'consumeCount=1', 'backlogCount=9', 'avgConsumeMs=5000'],
+      suggestions: ['Increase consumer concurrency'],
+    },
+  },
+  thread_pool_rejection: {
+    experiment: {
+      experimentId: 'thread_pool_rejection',
+      scenarioCode: 'THREAD_POOL_SATURATION',
+      status: 'EVALUATING',
+      traceId: 'trace_thread_pool_rejection',
+    },
+    metrics: [
+      { metricName: 'activeThreadCount', metricValue: '16', metricUnit: 'count', component: 'Executor' },
+      { metricName: 'maximumPoolSize', metricValue: '16', metricUnit: 'count', component: 'Executor' },
+      { metricName: 'rejectedTaskCount', metricValue: '3', metricUnit: 'count', component: 'Executor' },
+    ],
+    traceTree: { traceId: 'trace_thread_pool_rejection', roots: [] },
+    ruleResult: {
+      experimentId: 'thread_pool_rejection',
+      faultType: 'THREAD_POOL_SATURATION',
+      faultName: 'Thread pool saturation',
+      confidence: 0.88,
+      matched: true,
+      reason: 'activeThreadCount reaches maximumPoolSize and rejectedTaskCount is greater than zero.',
+      evidence: ['activeThreadCount=16', 'maximumPoolSize=16', 'rejectedTaskCount=3'],
+      suggestions: ['Check queue size and reject policy'],
+    },
+  },
+  idempotency_request_hash_conflict: {
+    experiment: {
+      experimentId: 'idempotency_request_hash_conflict',
+      scenarioCode: 'IDEMPOTENCY_CONFLICT',
+      status: 'EVALUATING',
+      traceId: 'trace_idempotency_request_hash_conflict',
+    },
+    metrics: [
+      { metricName: 'requestCount', metricValue: '5', metricUnit: 'count', component: 'Redis' },
+      { metricName: 'hashMismatchCount', metricValue: '1', metricUnit: 'count', component: 'Redis' },
+      { metricName: 'conflictCount', metricValue: '1', metricUnit: 'count', component: 'Redis' },
+    ],
+    traceTree: { traceId: 'trace_idempotency_request_hash_conflict', roots: [] },
+    ruleResult: {
+      experimentId: 'idempotency_request_hash_conflict',
+      faultType: 'IDEMPOTENCY_CONFLICT',
+      faultName: 'Idempotency conflict',
+      confidence: 0.9,
+      matched: true,
+      reason: 'The same Idempotency-Key maps to different requestHash values.',
+      evidence: ['requestCount=5', 'hashMismatchCount=1', 'conflictCount=1'],
+      suggestions: ['Reject conflicting request hashes'],
+    },
+  },
+}
+const debugForm = reactive({
+  caseId: 'mq_backlog_core_metrics',
+  topK: 3,
+  includeContent: false,
+})
+const debugLoading = ref(false)
+const debugError = ref('')
+const debugResult = ref(null)
+
 const selectedScenario = computed(() =>
   scenarios.find((scenario) => scenario.code === selectedScenarioCode.value) ?? scenarios[0],
 )
 
 const traceRoots = computed(() => {
   return Array.isArray(traceTree.value?.roots) ? traceTree.value.roots : []
+})
+
+const evaluationSummaries = computed(() => {
+  if (!evaluationResult.value) return []
+  const summaries = evaluationResult.value.summaries ?? [evaluationResult.value]
+  return summaries.filter(Boolean)
 })
 
 function selectScenario(code) {
@@ -95,7 +193,48 @@ async function requestJson(url, options = {}) {
   if (payload && typeof payload.code === 'number' && payload.code !== 0) {
     throw new Error(payload.message || '请求失败')
   }
-  return payload?.data ?? null
+  return payload?.data ?? payload ?? null
+}
+
+async function runRagEvaluation() {
+  evaluationLoading.value = true
+  evaluationError.value = ''
+  evaluationResult.value = null
+  try {
+    evaluationResult.value = await requestJson('/ai/runbooks/evaluate', {
+      method: 'POST',
+      body: JSON.stringify({
+        retriever: evaluationForm.retriever,
+        topK: Number(evaluationForm.topK) || 3,
+        report: evaluationForm.report,
+      }),
+    })
+  } catch (error) {
+    evaluationError.value = error.message || 'RAG evaluation failed'
+  } finally {
+    evaluationLoading.value = false
+  }
+}
+
+async function runRagDebug() {
+  debugLoading.value = true
+  debugError.value = ''
+  debugResult.value = null
+  try {
+    const selectedCase = ragDebugCases[debugForm.caseId]
+    debugResult.value = await requestJson('/ai/runbooks/retrieve/debug', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...selectedCase,
+        topK: Number(debugForm.topK) || 3,
+        includeContent: debugForm.includeContent,
+      }),
+    })
+  } catch (error) {
+    debugError.value = error.message || 'RAG retrieval debug failed'
+  } finally {
+    debugLoading.value = false
+  }
 }
 
 async function fetchTraceTree(traceId) {
@@ -247,6 +386,22 @@ function formatBoolean(value) {
   if (value === true) return 'true'
   if (value === false) return 'false'
   return '暂无数据'
+}
+function formatMetric(value) {
+  if (typeof value !== 'number') return formatValue(value)
+  return value.toFixed(4)
+}
+
+function formatRefs(items) {
+  if (!Array.isArray(items) || items.length === 0) return 'None'
+  return items
+    .map((item) => `${item.docId || '-'}#${item.section || '-'}`)
+    .join(', ')
+}
+
+function formatMetadata(metadata) {
+  if (!metadata || Object.keys(metadata).length === 0) return '{}'
+  return JSON.stringify(metadata, null, 2)
 }
 </script>
 
@@ -516,6 +671,211 @@ function formatBoolean(value) {
             <TraceNode v-for="node in traceRoots" :key="node.spanId || node.operationName" :node="node" />
           </div>
           <p v-else class="empty">暂无 Trace 数据</p>
+        </section>
+      </section>
+    </section>
+
+    <section class="rag-console">
+      <div class="rag-console-header">
+        <div>
+          <p class="eyebrow">RAG Console</p>
+          <h2>Retrieval Evaluation and Debug</h2>
+        </div>
+        <div class="status-strip">
+          <span>AI Service</span>
+          <strong>/ai</strong>
+        </div>
+      </div>
+
+      <section class="rag-grid">
+        <section class="panel rag-panel">
+          <div class="section-heading">
+            <h2>RAG Evaluation</h2>
+            <span>{{ evaluationForm.retriever }} / topK={{ evaluationForm.topK }}</span>
+          </div>
+
+          <div class="rag-form">
+            <label class="field">
+              <span>retriever</span>
+              <select v-model="evaluationForm.retriever">
+                <option value="bm25">bm25</option>
+                <option value="hybrid">hybrid</option>
+                <option value="milvus">milvus</option>
+                <option value="all">all</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>topK</span>
+              <input v-model.number="evaluationForm.topK" type="number" min="1" />
+            </label>
+            <label class="check-field">
+              <input v-model="evaluationForm.report" type="checkbox" />
+              <span>report</span>
+            </label>
+            <button type="button" :disabled="evaluationLoading" @click="runRagEvaluation">
+              {{ evaluationLoading ? 'Running...' : 'Run Evaluation' }}
+            </button>
+          </div>
+
+          <section v-if="evaluationError" class="alert">
+            {{ evaluationError }}
+          </section>
+
+          <div v-if="evaluationSummaries.length" class="rag-stack">
+            <div class="metric-card-grid">
+              <article
+                v-for="summary in evaluationSummaries"
+                :key="summary.retrieverName"
+                class="metric-card"
+                :class="{ failed: summary.error }"
+              >
+                <span>{{ summary.retrieverName }}</span>
+                <strong v-if="summary.error">error</strong>
+                <strong v-else>{{ formatMetric(summary.hitAtK) }} Hit@K</strong>
+                <small v-if="summary.error">{{ summary.error }}</small>
+                <small v-else>
+                  cases={{ summary.caseCount }}
+                  recall={{ formatMetric(summary.recallAtK) }}
+                  mrr={{ formatMetric(summary.mrr) }}
+                </small>
+              </article>
+            </div>
+
+            <div
+              v-for="summary in evaluationSummaries"
+              :key="`${summary.retrieverName}-cases`"
+              class="rag-result-group"
+            >
+              <div class="section-heading compact">
+                <h3>{{ summary.retrieverName }} case results</h3>
+                <span v-if="summary.error">failed</span>
+              </div>
+              <section v-if="summary.error" class="alert">
+                {{ summary.error }}
+              </section>
+              <div v-else class="table-wrap rag-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>caseId</th>
+                      <th>hit</th>
+                      <th>recall</th>
+                      <th>reciprocalRank</th>
+                      <th>expected</th>
+                      <th>retrieved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="result in summary.results || []" :key="result.caseId">
+                      <td>{{ result.caseId }}</td>
+                      <td>{{ formatBoolean(result.hit) }}</td>
+                      <td>{{ formatMetric(result.recall) }}</td>
+                      <td>{{ formatMetric(result.reciprocalRank) }}</td>
+                      <td>{{ formatRefs(result.expected) }}</td>
+                      <td>{{ formatRefs(result.retrieved) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div v-if="evaluationResult?.markdownReport" class="rag-result-group">
+              <div class="section-heading compact">
+                <h3>Markdown Report</h3>
+              </div>
+              <pre class="markdown-report">{{ evaluationResult.markdownReport }}</pre>
+            </div>
+          </div>
+          <p v-else-if="!evaluationLoading && !evaluationError" class="empty">
+            No evaluation result
+          </p>
+        </section>
+
+        <section class="panel rag-panel">
+          <div class="section-heading">
+            <h2>Retrieval Debug</h2>
+            <span>{{ debugForm.caseId }}</span>
+          </div>
+
+          <div class="rag-form debug-form">
+            <label class="field wide">
+              <span>demo case</span>
+              <select v-model="debugForm.caseId">
+                <option value="mq_backlog_core_metrics">mq_backlog_core_metrics</option>
+                <option value="thread_pool_rejection">thread_pool_rejection</option>
+                <option value="idempotency_request_hash_conflict">idempotency_request_hash_conflict</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>topK</span>
+              <input v-model.number="debugForm.topK" type="number" min="1" />
+            </label>
+            <label class="check-field">
+              <input v-model="debugForm.includeContent" type="checkbox" />
+              <span>includeContent</span>
+            </label>
+            <button type="button" :disabled="debugLoading" @click="runRagDebug">
+              {{ debugLoading ? 'Debugging...' : 'Debug Retrieval' }}
+            </button>
+          </div>
+
+          <section v-if="debugError" class="alert">
+            {{ debugError }}
+          </section>
+
+          <div v-if="debugResult" class="rag-stack">
+            <div v-if="debugResult.warnings?.length" class="warning-box">
+              <strong>Warnings</strong>
+              <ul>
+                <li v-for="warning in debugResult.warnings" :key="warning">{{ warning }}</li>
+              </ul>
+            </div>
+
+            <div class="rag-result-group">
+              <div class="section-heading compact">
+                <h3>queryText</h3>
+                <span>{{ debugResult.faultType }}</span>
+              </div>
+              <pre class="query-text">{{ debugResult.queryText }}</pre>
+            </div>
+
+            <div
+              v-for="stage in [
+                ['vectorResults', 'Vector Results'],
+                ['bm25Results', 'BM25 Results'],
+                ['fusionResults', 'Fusion Results'],
+                ['rerankResults', 'Rerank Results'],
+                ['finalResults', 'Final Results'],
+              ]"
+              :key="stage[0]"
+              class="rag-result-group"
+            >
+              <div class="section-heading compact">
+                <h3>{{ stage[1] }}</h3>
+                <span>{{ debugResult[stage[0]]?.length || 0 }} chunks</span>
+              </div>
+              <div v-if="debugResult[stage[0]]?.length" class="debug-list">
+                <article
+                  v-for="(chunk, index) in debugResult[stage[0]]"
+                  :key="`${stage[0]}-${chunk.docId}-${chunk.section}-${index}`"
+                  class="debug-chunk"
+                >
+                  <div class="debug-chunk-head">
+                    <strong>{{ chunk.docId }} / {{ chunk.section }}</strong>
+                    <span>{{ formatMetric(chunk.score) }}</span>
+                  </div>
+                  <p>{{ chunk.title }}</p>
+                  <small>{{ chunk.faultType }}</small>
+                  <pre class="metadata">{{ formatMetadata(chunk.metadata) }}</pre>
+                  <pre v-if="chunk.content" class="chunk-content">{{ chunk.content }}</pre>
+                </article>
+              </div>
+              <p v-else class="empty small">No chunks</p>
+            </div>
+          </div>
+          <p v-else-if="!debugLoading && !debugError" class="empty">
+            No debug result
+          </p>
         </section>
       </section>
     </section>
