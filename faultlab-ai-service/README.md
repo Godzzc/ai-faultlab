@@ -20,6 +20,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Supports Markdown RAG Evaluation Report generation for human review and comparison.
 - Supports a RAG Evaluation Regression Gate for BM25-only CI checks.
 - Supports RAG Retrieval Debug for inspecting query, vector, BM25, fusion, rerank, and final results.
+- Supports Runbook Management Basic and synchronous Index Task records.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
 - Supports basic `ModelRouter` model selection.
 - Parses and validates LLM JSON output.
@@ -231,6 +232,38 @@ CLI:
 ```
 
 Use this to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus. Vector debug depends on Milvus and embedding availability; if unavailable, debug output keeps BM25 results and records the vector failure in `warnings`.
+
+## Runbook Management Basic
+
+Runbooks are still local Markdown files under `runbooks/`, but the AI service exposes basic management APIs:
+
+```text
+GET /ai/runbooks
+GET /ai/runbooks/{docId}
+POST /ai/runbooks
+PUT /ai/runbooks/{docId}
+DELETE /ai/runbooks/{docId}
+```
+
+`docId` must contain only lowercase letters, digits, and hyphens, such as `mq-backlog`. The service only reads and writes files inside the local `runbooks/` directory. Delete removes the Markdown file only; stale Milvus chunks are cleaned by the next index run.
+
+Index task APIs:
+
+```text
+POST /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks/{taskId}
+```
+
+`POST /ai/runbooks/index-tasks` runs indexing synchronously in this first version and records `taskId`, status, timestamps, duration, forceRebuild, counts, document lists, and errorMessage. Records are stored in:
+
+```text
+data/runbook_index_tasks.json
+```
+
+The existing `POST /ai/runbooks/index` is still supported and keeps the old response fields while adding `taskId`. `docIds` on the task request is accepted but reserved for future selective indexing.
+
+Current limits: no MySQL Runbook tables, no async queue, no RabbitMQ indexing task, no permissions, no audit log, and no version approval workflow.
 
 ## RAG v0.5 Documentation
 

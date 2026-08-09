@@ -1,5 +1,13 @@
 # AI FaultLab RAG Architecture
 
+## Runbook Management and Index Task Basic
+
+The v0.5 RAG implementation now includes local Runbook Management Basic and Index Task Basic. Runbooks remain Markdown files under `faultlab-ai-service/runbooks`; the management service validates `docId`, reads and writes only inside that directory, parses front matter and `##` sections, calculates content hashes, and joins local index state metadata.
+
+Index task records wrap the existing `RunbookIndexer` without changing its core behavior. Each task records `taskId`, status, timestamps, duration, `forceRebuild`, counts, document lists, and `errorMessage`. The local task store is `faultlab-ai-service/data/runbook_index_tasks.json`, capped to the latest 100 records and ignored by Git.
+
+Current scope remains intentionally small: no MySQL Runbook tables, no async queue, no RabbitMQ indexing task, no permission system, no audit log, and no version approval workflow.
+
 本文档描述 AI FaultLab 当前 v0.5 RAG Demo 的架构。它强调当前已经实现的工程链路、降级策略和评测能力，也明确当前不是生产级知识管理平台。
 
 ## 1. 总体架构

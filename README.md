@@ -383,6 +383,30 @@ python scripts/debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --
 
 The debug response includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus; vector debug requires Milvus and embeddings to be available.
 
+### Runbook Management and Index Task Basic
+
+`faultlab-ai-service` now includes local Markdown Runbook management APIs and a synchronous index task record.
+
+Runbook APIs:
+
+```text
+GET /ai/runbooks
+GET /ai/runbooks/{docId}
+POST /ai/runbooks
+PUT /ai/runbooks/{docId}
+DELETE /ai/runbooks/{docId}
+```
+
+Index task APIs:
+
+```text
+POST /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks/{taskId}
+```
+
+The existing `POST /ai/runbooks/index` remains compatible and now also returns `taskId`. Task records are stored locally in `faultlab-ai-service/data/runbook_index_tasks.json`, which is ignored by Git. This is still local Markdown plus JSON state, not MySQL-backed Runbook management, not an async indexing queue, and not an approval or permission system.
+
 ## RAG v0.5 Documentation
 
 当前 RAG 阶段定位为 `v0.5 RAG Demo`，重点是把 Runbook 索引、Hybrid Retrieval、Prompt 注入、引用校验和检索评测串成闭环。它不是生产级 Runbook 管理平台。
