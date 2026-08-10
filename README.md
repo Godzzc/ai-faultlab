@@ -308,6 +308,8 @@ Dataset:
 faultlab-ai-service/evaluation/rag_eval_cases.json
 ```
 
+The evaluation dataset now contains 27 cases, expanded from the original 9-case baseline. It covers more detailed MQ backlog, thread pool saturation, and idempotency conflict situations while keeping expected references strict at `docId + section`.
+
 Metrics:
 
 - Hit@K
@@ -342,7 +344,7 @@ POST http://localhost:8000/ai/runbooks/evaluate
 body: {"retriever": "all", "topK": 3, "report": true}
 ```
 
-The report suggestions are rule-based and do not call the LLM. Future extensions can add more cases, nDCG, retrieval result visualization, and stricter CI regression thresholds.
+The report suggestions are rule-based and do not call the LLM. After expanding the dataset, retrieval metrics may decrease because the baseline is stricter; this should be read as improved evaluation coverage, not necessarily system degradation. Follow-up tuning should use miss cases to improve Runbook keywords, query construction, BM25-like scoring, and rerank weights. Future extensions can add nDCG, retrieval result visualization, and stricter CI regression thresholds.
 
 ### RAG Evaluation Regression Gate
 
