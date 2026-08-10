@@ -70,11 +70,13 @@ The BM25-like keyword retriever:
 - Parses `docId`, `title`, `faultType`, and `keywords`.
 - Splits content by second-level headings (`##`) into sections.
 - Applies strong filtering by `ruleResult.faultType` or `experiment.scenarioCode`.
-- Extracts keywords from rule reason, rule evidence, metrics, and trace summary.
+- Extracts terms from the shared retrieval query text, including fault type, rule name, rule reason, evidence, suggestions, metrics, and trace summary.
 - Scores title, section, content, and runbook keywords with BM25-like keyword scoring.
 - Returns the top matching chunks.
 
 The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, document length normalization, title/section/keyword boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
+
+For v0.8 retrieval tuning, Runbook front matter keywords and section content include more metric field names and English aliases from miss cases. `query_builder.py` also adds stable query fields and lightweight domain hints derived from metrics and evidence, while keeping deduplication and length control. This improves evaluation and debug consistency without introducing standard BM25 or a real rerank model.
 
 The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, operational sections such as troubleshooting and fixes, evidence metrics, metric keywords, and chunks found by both vector and keyword retrieval.
 

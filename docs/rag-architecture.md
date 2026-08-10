@@ -8,6 +8,14 @@ Index task records wrap the existing `RunbookIndexer` without changing its core 
 
 Current scope remains intentionally small: no MySQL Runbook tables, no async queue, no RabbitMQ indexing task, no permission system, no audit log, and no version approval workflow.
 
+## v0.8 Retrieval Tuning
+
+The v0.8 tuning pass keeps the same retrieval architecture and focuses on Runbook keywords plus query construction. Runbook Markdown now includes more section-level metric names and English aliases for miss cases, while preserving `docId`, `faultType`, and section titles used by strict evaluation refs.
+
+`query_builder.py` now builds query text from stable Evidence Package fields: `faultType`, `faultName`, `reason`, `evidence`, `suggestions`, metrics, and trace summary slow/error span signals. It also performs basic empty-field handling, deduplication, and length control. BM25-like retrieval uses this same query text for term extraction so CLI evaluation, debug, hybrid fallback, and Milvus query construction stay aligned.
+
+This is still BM25-like keyword retrieval, not standard BM25, and the reranker remains lightweight and rule-based rather than a real rerank model.
+
 本文档描述 AI FaultLab 当前 v0.5 RAG Demo 的架构。它强调当前已经实现的工程链路、降级策略和评测能力，也明确当前不是生产级知识管理平台。
 
 ## 1. 总体架构

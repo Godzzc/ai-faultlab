@@ -1,4 +1,5 @@
 import importlib.util
+from collections import Counter
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -104,6 +105,20 @@ def test_query_text_contains_fault_type():
     assert "MQ_BACKLOG" in query_text
 
 
+def test_query_text_contains_fault_name():
+    request = build_request()
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+
+    assert "MQ backlog" in query_text
+
+
+def test_query_text_contains_rule_result_reason():
+    request = build_request()
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+
+    assert "publish count is higher than consume count" in query_text
+
+
 def test_query_text_contains_metric_name():
     request = build_request()
     query_text = build_retrieval_query(request, build_trace_summary(request))
@@ -111,11 +126,104 @@ def test_query_text_contains_metric_name():
     assert "publishCount" in query_text
 
 
+def test_query_text_contains_metric_value():
+    request = build_request()
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+
+    assert "metricValue=10" in query_text
+
+
+def test_query_text_contains_metric_component():
+    request = build_request()
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+
+    assert "component=RabbitMQ" in query_text
+
+
 def test_query_text_contains_rule_result_evidence():
     request = build_request()
     query_text = build_retrieval_query(request, build_trace_summary(request))
 
     assert "backlogCount=9" in query_text
+
+
+def test_query_text_contains_rule_result_suggestions():
+    request = build_request()
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+
+    assert "increase consumers" in query_text
+
+
+def test_query_text_contains_trace_slow_operation_and_component():
+    request = RetrievalDebugRequest.model_validate({
+        **build_request().model_dump(by_alias=True),
+        "traceTree": {
+            "traceId": "trace_debug_mq_001",
+            "roots": [
+                {
+                    "traceId": "trace_debug_mq_001",
+                    "spanId": "span_1",
+                    "operationName": "consumeMessage",
+                    "component": "RabbitMQ",
+                    "durationMs": 1500,
+                    "status": "OK",
+                }
+            ],
+        },
+    })
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+
+    assert "operation=consumeMessage" in query_text
+    assert "component=RabbitMQ" in query_text
+    assert "durationMs=1500" in query_text
+
+
+def test_query_text_is_safe_for_none_and_empty_fields():
+    request = DiagnosisRequest.model_validate({
+        "experiment": {
+            "experimentId": "exp_empty",
+            "scenarioCode": "MQ_BACKLOG",
+        },
+        "metrics": [
+            {
+                "metricName": "",
+                "metricValue": "",
+                "component": "",
+            }
+        ],
+        "traceTree": {"traceId": "trace_empty", "roots": []},
+        "ruleResult": {
+            "experimentId": "exp_empty",
+            "faultType": "MQ_BACKLOG",
+            "faultName": "",
+            "reason": "",
+            "evidence": [""],
+            "suggestions": [""],
+        },
+    })
+    request.metrics[0].metric_name = None
+    request.metrics[0].metric_value = None
+    request.metrics[0].component = None
+    request.rule_result.fault_name = None
+    request.rule_result.reason = None
+    request.rule_result.evidence = [None, ""]
+    request.rule_result.suggestions = [None, ""]
+
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+
+    assert "MQ_BACKLOG" in query_text
+    assert "None" not in query_text
+
+
+def test_query_text_deduplicates_repeated_parts():
+    request = build_request()
+    request.rule_result.evidence = ["publishCount=10", "publishCount=10", "backlogCount=9"]
+    request.rule_result.suggestions = ["increase consumers", "increase consumers"]
+    query_text = build_retrieval_query(request, build_trace_summary(request))
+    line_counts = Counter(query_text.splitlines())
+
+    assert max(line_counts.values()) == 1
+    assert query_text.count("increase consumers") == 1
 
 
 def test_debug_service_returns_all_retrieval_stages():

@@ -4,6 +4,7 @@ from typing import Any
 
 from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever, TOKEN_PATTERN
 from app.retrieval.models import RunbookChunk
+from app.retrieval.query_builder import build_retrieval_query
 from app.schemas import DiagnosisRequest
 
 
@@ -50,18 +51,8 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
         request: DiagnosisRequest,
         trace_summary: dict[str, Any],
     ) -> list[str]:
-        values: list[Any] = []
-        if request.rule_result:
-            values.extend([
-                request.rule_result.fault_type,
-                request.rule_result.fault_name,
-                request.rule_result.reason,
-                request.rule_result.evidence,
-            ])
-        values.append(request.experiment.scenario_code)
-        values.append([metric.model_dump(by_alias=True) for metric in request.metrics])
-        values.append(trace_summary)
-        return list(self._tokens_from_value(values))
+        query_text = build_retrieval_query(request, trace_summary)
+        return list(self._tokens_from_value(query_text))
 
     def _content_terms(self, chunk: RunbookChunk) -> list[str]:
         values = [
