@@ -42,6 +42,14 @@ Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResult
 
 Current limits: no LLM call, no frontend UI, no visualization chart, no standard BM25, and no real rerank model. Milvus debug depends on Milvus and embedding availability. BM25 debug can run without Milvus.
 
+## v0.8 Retrieval Tuning Notes
+
+The v0.8 retrieval tuning pass uses the expanded 27-case evaluation dataset and miss cases to improve Runbook keyword coverage and query construction. Runbook updates add section-level metric names and English aliases for MQ backlog, thread pool saturation, and idempotency conflict scenarios.
+
+Query construction now keeps `faultType`, `faultName`, `reason`, `evidence`, `suggestions`, metric name/value/component, and trace summary signals in the retrieval query text with basic deduplication and length control. It also adds lightweight domain hints derived from metric and evidence fields, such as `slow consumer`, `rejection policy`, `unique index`, and `Redis error`.
+
+This remains BM25-like keyword retrieval, not standard BM25. The reranker remains lightweight and rule-based, not a real rerank model.
+
 本文档说明 AI FaultLab 当前 RAG v0.5 的检索评测能力。评测只覆盖 retrieval，不调用 LLM，不修改诊断主流程。
 
 ## 1. 为什么需要 RAG Evaluation

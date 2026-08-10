@@ -10,6 +10,7 @@ from app.evaluation.models import RetrievalEvalCase, RetrievalEvalSummary
 from app.evaluation.report_generator import RetrievalEvaluationReportGenerator
 from app.evaluation.retrieval_evaluator import RetrievalEvaluator
 from app.main import app
+from app.retrieval.bm25_runbook_retriever import Bm25RunbookRetriever
 from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever
 from app.retrieval.models import RunbookChunk
 
@@ -209,6 +210,15 @@ def test_evaluation_runner_can_evaluate_mock_retriever(tmp_path):
     assert summary.hit_at_k == 1.0
     assert summary.recall_at_k == 1.0
     assert summary.mrr == 1.0
+
+
+def test_bm25_evaluation_runs_with_real_runbooks():
+    summary = RetrievalEvaluator(CASES_PATH).evaluate("bm25", Bm25RunbookRetriever(RUNBOOK_DIR), top_k=3)
+
+    assert summary.case_count >= 25
+    assert 0.0 <= summary.hit_at_k <= 1.0
+    assert 0.0 <= summary.recall_at_k <= 1.0
+    assert 0.0 <= summary.mrr <= 1.0
 
 
 def test_report_generator_returns_markdown_string():
