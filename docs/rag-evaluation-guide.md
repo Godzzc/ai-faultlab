@@ -50,6 +50,14 @@ Query construction now keeps `faultType`, `faultName`, `reason`, `evidence`, `su
 
 This remains BM25-like keyword retrieval, not standard BM25. The reranker remains lightweight and rule-based, not a real rerank model.
 
+## v0.8 Scoring and Rerank Tuning
+
+The v0.8 scoring pass keeps the retrieval stack dependency-free and tunes only the explainable rules. BM25-like scoring now applies explicit boosts for matching `faultType`, section titles, front matter keywords, content terms, metric names, and evidence keys, with a light length normalization so longer sections do not win only because they contain more words.
+
+The lightweight reranker now uses rule-based section intent signals. Reason or root-cause style queries can lift `常见原因`, suggestion or remediation queries can lift `修复建议`, metric and evidence-heavy queries can lift `核心指标`, diagnostic checks can lift `排查步骤`, and risk terms can lift `风险提示`. This is still not a standard BM25 implementation and still not a real rerank model.
+
+The tuning is validated with the expanded evaluation cases and the BM25 regression gate. A metric change should be interpreted together with miss case details, partial recall cases, and reciprocal rank changes, not as a standalone signal.
+
 本文档说明 AI FaultLab 当前 RAG v0.5 的检索评测能力。评测只覆盖 retrieval，不调用 LLM，不修改诊断主流程。
 
 ## 1. 为什么需要 RAG Evaluation

@@ -74,11 +74,13 @@ The BM25-like keyword retriever:
 - Scores title, section, content, and runbook keywords with BM25-like keyword scoring.
 - Returns the top matching chunks.
 
-The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, document length normalization, title/section/keyword boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
+The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, light document length normalization, title/section/keyword/content boosts, exact metric-name and evidence-key boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
 
 For v0.8 retrieval tuning, Runbook front matter keywords and section content include more metric field names and English aliases from miss cases. `query_builder.py` also adds stable query fields and lightweight domain hints derived from metrics and evidence, while keeping deduplication and length control. This improves evaluation and debug consistency without introducing standard BM25 or a real rerank model.
 
-The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, operational sections such as troubleshooting and fixes, evidence metrics, metric keywords, and chunks found by both vector and keyword retrieval.
+The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, metric and evidence keys, chunks found by both vector and keyword retrieval, and section intent signals such as root cause, fix, metrics, troubleshooting, and risk.
+
+The v0.8 scoring/rerank tuning is validated through the expanded retrieval evaluation cases and the BM25 regression gate. It does not change API paths, RRF fusion, regression thresholds, or the evaluation expected references.
 
 This version does not include FAISS, Elasticsearch, LangChain, LangGraph, MCP, Tool Calling, or a dedicated rerank model.
 
