@@ -84,7 +84,7 @@ Future upgrades can add:
 
 - standard BM25
 - BGE reranker or Alibaba Cloud Bailian rerank
-- more retrieval evaluation cases
+- more retrieval evaluation cases beyond the current 27-case baseline
 - nDCG
 - faultType grouped metrics
 - retrieval result visualization
@@ -100,6 +100,8 @@ The evaluation dataset is stored at:
 ```text
 evaluation/rag_eval_cases.json
 ```
+
+The dataset currently contains 27 cases, expanded from the original 9-case baseline. Each fault type has at least 8 cases and covers more detailed MQ backlog, thread pool saturation, and idempotency conflict scenarios. Expected references remain strict `docId + section` pairs.
 
 Each case defines a scenario query and expected `docId + section` references. The current metrics are:
 
@@ -158,7 +160,7 @@ When `report=true`, the response includes `markdownReport`. The report contains:
 - Miss Cases
 - Optimization Suggestions
 
-The optimization suggestions are rule-based and do not call an LLM. Current reporting limits: no nDCG and no visualization UI.
+The optimization suggestions are rule-based and do not call an LLM. After the case expansion, metrics may decrease because the evaluation baseline is stricter; treat that as stronger coverage, not an automatic system regression. Use miss cases to guide later Runbook keyword, query construction, BM25-like scoring, and rerank weight tuning. Current reporting limits: no nDCG and no visualization UI.
 
 ## RAG Evaluation Regression Gate
 
@@ -170,7 +172,7 @@ Thresholds:
 evaluation/rag_eval_thresholds.json
 ```
 
-The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. Raise them gradually after adding more evaluation cases and stabilizing retrieval behavior.
+The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. They are not changed by the 27-case dataset expansion; if metrics drop, review miss cases first instead of lowering thresholds.
 
 Run BM25 locally:
 

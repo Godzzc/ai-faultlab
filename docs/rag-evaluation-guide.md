@@ -62,11 +62,13 @@ RAG 链路不能只靠人工观察“看起来像召回了相关内容”。如�
 faultlab-ai-service/evaluation/rag_eval_cases.json
 ```
 
-当前包含 9 个 case，覆盖：
+当前包含 27 个 case，已从早期 9 个 case 扩充为更稳定的 v0.8.0 评测基线，覆盖：
 
 - `MQ_BACKLOG`
 - `THREAD_POOL_SATURATION`
 - `IDEMPOTENCY_CONFLICT`
+
+每类故障至少 8 个 case，覆盖 MQ 堆积、线程池饱和和幂等冲突的更多细分场景。每个 expected 仍然使用严格的 `docId + section`，并且 section 必须来自已有 Runbook。
 
 每个 case 包含：
 
@@ -186,6 +188,12 @@ Markdown report 面向人工阅读、复盘和博客整理。报告包含：
 
 ## 7. 如何解读评测结果
 
+### 扩充数据集后指标下降是正常现象
+
+评测集从 9 个 case 扩充到 27 个 case 后，BM25-like、Milvus 或 Hybrid 的 Hit@K、Recall@K、MRR 可能下降。这通常说明评测集覆盖了更细的故障表达和更难的 section 匹配，不应直接解释为系统退化。
+
+后续优化应基于 miss case 逐步调整 Runbook keywords、query construction、BM25-like scoring 和 rerank 权重，而不是降低 regression threshold 或放宽 expected 匹配标准。
+
 ### Hybrid 不一定每个 case 都最好
 
 Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-like 或 Milvus。评测时应看整体指标、按 faultType 分组指标，以及具体 miss case。
@@ -210,7 +218,7 @@ Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-l
 
 ## 8. 当前限制
 
-- case 数量少，目前只有 9 个。
+- case 数量已经扩充到 27 个，但仍不是生产级大规模评测集。
 - 没有 nDCG。
 - hybrid gate 尚未作为 CI 必过项。
 - Milvus evaluation 依赖 Milvus 和 embedding 可用。
@@ -220,7 +228,7 @@ Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-l
 
 ## 9. 后续计划
 
-- 扩充 evaluation case。
+- 基于 miss case 继续扩充和维护 evaluation case。
 - 按 faultType 统计趋势。
 - 增加 nDCG。
 - 增加检索结果可视化。

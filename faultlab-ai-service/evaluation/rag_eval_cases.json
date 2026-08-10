@@ -6,24 +6,35 @@
       "ruleResult": {
         "faultType": "MQ_BACKLOG",
         "faultName": "MQ 消息堆积",
-        "reason": "生产消息数大于消费消息数，且消费耗时较高，疑似 MQ 消息堆积。",
+        "reason": "publishCount 持续大于 consumeCount，backlogCount 上升，同时 avgConsumeMs 偏高，符合 MQ 消息堆积核心指标特征。",
         "evidence": [
-          "publishCount=10",
-          "consumeCount=1",
-          "backlogCount=9",
-          "avgConsumeMs=5000"
+          "publishCount=1200",
+          "consumeCount=420",
+          "backlogCount=780",
+          "avgConsumeMs=3800",
+          "queueReadyCount=690"
         ]
       },
       "metrics": [
         {
           "metricName": "publishCount",
-          "metricValue": "10",
+          "metricValue": "1200",
           "component": "RabbitMQ"
         },
         {
           "metricName": "consumeCount",
-          "metricValue": "1",
+          "metricValue": "420",
           "component": "RabbitMQ"
+        },
+        {
+          "metricName": "backlogCount",
+          "metricValue": "780",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "avgConsumeMs",
+          "metricValue": "3800",
+          "component": "Consumer"
         }
       ]
     },
@@ -41,17 +52,29 @@
       "ruleResult": {
         "faultType": "MQ_BACKLOG",
         "faultName": "MQ 消息堆积",
-        "reason": "消费者处理逻辑耗时过长，消费速度跟不上生产速度。",
+        "reason": "消费端处理耗时明显变长，生产速度没有异常突增，怀疑消费者慢逻辑或下游依赖变慢导致消费能力不足。",
         "evidence": [
-          "avgConsumeMs=4500",
-          "consumerDelayMs=4000",
-          "backlogCount=20"
+          "publishCount=500",
+          "consumeCount=180",
+          "backlogCount=320",
+          "avgConsumeMs=5200",
+          "consumerDelayMs=4800"
         ]
       },
       "metrics": [
         {
           "metricName": "avgConsumeMs",
-          "metricValue": "4500",
+          "metricValue": "5200",
+          "component": "Consumer"
+        },
+        {
+          "metricName": "consumerDelayMs",
+          "metricValue": "4800",
+          "component": "Consumer"
+        },
+        {
+          "metricName": "backlogCount",
+          "metricValue": "320",
           "component": "RabbitMQ"
         }
       ]
@@ -70,18 +93,30 @@
       "ruleResult": {
         "faultType": "MQ_BACKLOG",
         "faultName": "MQ 消息堆积",
-        "reason": "需要增加消费者并发、优化慢消费逻辑并处理死信队列。",
+        "reason": "消费能力长期低于生产速度，需要增加消费者并发、优化慢消费逻辑，并对失败消息设置死信队列。",
         "evidence": [
-          "consumeCount=1",
-          "backlogCount=30",
-          "avgConsumeMs=6000"
+          "consumeCount=160",
+          "publishCount=980",
+          "backlogCount=820",
+          "avgConsumeMs=6100",
+          "retryCount=95"
+        ],
+        "suggestions": [
+          "increase consumer concurrency",
+          "optimize slow consumer logic",
+          "configure dead letter queue"
         ]
       },
       "metrics": [
         {
           "metricName": "backlogCount",
-          "metricValue": "30",
+          "metricValue": "820",
           "component": "RabbitMQ"
+        },
+        {
+          "metricName": "retryCount",
+          "metricValue": "95",
+          "component": "Consumer"
         }
       ]
     },
@@ -93,23 +128,309 @@
     ]
   },
   {
+    "caseId": "mq_backlog_consumer_slow_logic",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "consumer business handler 中存在慢 SQL 和文件处理，avgConsumeMs 与 consumerDelayMs 同时升高，单条消息处理时间过长。",
+        "evidence": [
+          "avgConsumeMs=7600",
+          "consumerDelayMs=7200",
+          "slowSqlCount=18",
+          "backlogCount=460"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "avgConsumeMs",
+          "metricValue": "7600",
+          "component": "Consumer"
+        },
+        {
+          "metricName": "consumerDelayMs",
+          "metricValue": "7200",
+          "component": "Consumer"
+        },
+        {
+          "metricName": "slowSqlCount",
+          "metricValue": "18",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "常见原因"
+      },
+      {
+        "docId": "mq-backlog",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "mq_backlog_consumer_concurrency_low",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "Consumer 数量和消费线程数过低，message rates 显示 deliver/ack 速率低于 publish rate，消费者并发不足。",
+        "evidence": [
+          "consumerCount=1",
+          "consumerThreadCount=1",
+          "publishRate=180/s",
+          "ackRate=35/s",
+          "backlogCount=1400"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "consumerCount",
+          "metricValue": "1",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "publishRate",
+          "metricValue": "180",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "ackRate",
+          "metricValue": "35",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "backlogCount",
+          "metricValue": "1400",
+          "component": "RabbitMQ"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "常见原因"
+      },
+      {
+        "docId": "mq-backlog",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "mq_backlog_downstream_slow",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "消费者依赖数据库和 Redis，dbLatencyMs 与 redisLatencyMs 上升后 avgConsumeMs 升高，疑似下游服务拖慢消费速度。",
+        "evidence": [
+          "dbLatencyMs=2500",
+          "redisLatencyMs=900",
+          "avgConsumeMs=4300",
+          "backlogCount=510"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "dbLatencyMs",
+          "metricValue": "2500",
+          "component": "Database"
+        },
+        {
+          "metricName": "redisLatencyMs",
+          "metricValue": "900",
+          "component": "Redis"
+        },
+        {
+          "metricName": "avgConsumeMs",
+          "metricValue": "4300",
+          "component": "Consumer"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "mq-backlog",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "mq_backlog_retry_accumulation",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "消费失败消息反复重试，retryCount 和 redeliverCount 增长，正常消息被失败消息阻塞，队列处理效率下降。",
+        "evidence": [
+          "retryCount=220",
+          "redeliverCount=210",
+          "consumeErrorCount=80",
+          "backlogCount=960"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "retryCount",
+          "metricValue": "220",
+          "component": "Consumer"
+        },
+        {
+          "metricName": "redeliverCount",
+          "metricValue": "210",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "consumeErrorCount",
+          "metricValue": "80",
+          "component": "Consumer"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "风险提示"
+      },
+      {
+        "docId": "mq-backlog",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "mq_backlog_dead_letter_risk",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "失败消息没有进入死信队列而是无限重试，deadLetterCount 为 0 但 retryCount 持续增加，存在队列持续堆积风险。",
+        "evidence": [
+          "deadLetterCount=0",
+          "retryCount=340",
+          "consumeErrorCount=120",
+          "backlogCount=1800"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "deadLetterCount",
+          "metricValue": "0",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "retryCount",
+          "metricValue": "340",
+          "component": "Consumer"
+        },
+        {
+          "metricName": "backlogCount",
+          "metricValue": "1800",
+          "component": "RabbitMQ"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "风险提示"
+      },
+      {
+        "docId": "mq-backlog",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "mq_backlog_unacked_growth",
+    "scenarioCode": "MQ_BACKLOG",
+    "query": {
+      "ruleResult": {
+        "faultType": "MQ_BACKLOG",
+        "faultName": "MQ 消息堆积",
+        "reason": "queueUnackedCount 持续增长，Ready 消息不高但 Unacked 消息长时间不下降，怀疑 ACK 时机不合理或消费线程阻塞。",
+        "evidence": [
+          "queueReadyCount=45",
+          "queueUnackedCount=620",
+          "ackRate=12/s",
+          "avgConsumeMs=6800"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "queueReadyCount",
+          "metricValue": "45",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "queueUnackedCount",
+          "metricValue": "620",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "ackRate",
+          "metricValue": "12",
+          "component": "RabbitMQ"
+        },
+        {
+          "metricName": "avgConsumeMs",
+          "metricValue": "6800",
+          "component": "Consumer"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "mq-backlog",
+        "section": "现象"
+      },
+      {
+        "docId": "mq-backlog",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
     "caseId": "thread_pool_rejection",
     "scenarioCode": "THREAD_POOL_SATURATION",
     "query": {
       "ruleResult": {
         "faultType": "THREAD_POOL_SATURATION",
         "faultName": "线程池饱和",
-        "reason": "活跃线程数打满且出现 rejectedTaskCount，线程池已经无法继续接收任务。",
+        "reason": "activeThreadCount 达到 maximumPoolSize，rejectedTaskCount 增加，线程池已经触发拒绝策略。",
         "evidence": [
           "activeThreadCount=16",
           "maximumPoolSize=16",
-          "rejectedTaskCount=3"
+          "queueSize=100",
+          "rejectedTaskCount=8"
         ]
       },
       "metrics": [
         {
+          "metricName": "activeThreadCount",
+          "metricValue": "16",
+          "component": "Executor"
+        },
+        {
+          "metricName": "maximumPoolSize",
+          "metricValue": "16",
+          "component": "Executor"
+        },
+        {
           "metricName": "rejectedTaskCount",
-          "metricValue": "3",
+          "metricValue": "8",
           "component": "Executor"
         }
       ]
@@ -121,7 +442,7 @@
       },
       {
         "docId": "thread-pool-saturation",
-        "section": "常见原因"
+        "section": "风险提示"
       }
     ]
   },
@@ -132,17 +453,28 @@
       "ruleResult": {
         "faultType": "THREAD_POOL_SATURATION",
         "faultName": "线程池饱和",
-        "reason": "queueSize 持续增长，任务处理速度低于提交速度，需要检查线程池参数和队列长度。",
+        "reason": "queueSize 持续增长，acceptedTaskCount 低于 taskCount，任务提交速度超过线程池处理能力。",
         "evidence": [
-          "queueSize=80",
-          "taskCount=100",
-          "acceptedTaskCount=80"
+          "taskCount=1200",
+          "acceptedTaskCount=880",
+          "queueSize=260",
+          "avgTaskDurationMs=2600"
         ]
       },
       "metrics": [
         {
+          "metricName": "taskCount",
+          "metricValue": "1200",
+          "component": "Executor"
+        },
+        {
+          "metricName": "acceptedTaskCount",
+          "metricValue": "880",
+          "component": "Executor"
+        },
+        {
           "metricName": "queueSize",
-          "metricValue": "80",
+          "metricValue": "260",
           "component": "Executor"
         }
       ]
@@ -151,6 +483,10 @@
       {
         "docId": "thread-pool-saturation",
         "section": "排查步骤"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "现象"
       }
     ]
   },
@@ -161,17 +497,253 @@
       "ruleResult": {
         "faultType": "THREAD_POOL_SATURATION",
         "faultName": "线程池饱和",
-        "reason": "avgTaskDurationMs 和 taskSleepMs 较高，长耗时任务占用线程，需要优化慢任务并拆分长任务。",
+        "reason": "avgTaskDurationMs 和 taskSleepMs 很高，长耗时任务占用工作线程，队列堆积并拖慢异步任务执行。",
         "evidence": [
-          "avgTaskDurationMs=5000",
-          "taskSleepMs=5000",
-          "activeThreadCount=16"
+          "avgTaskDurationMs=8500",
+          "taskSleepMs=8000",
+          "activeThreadCount=12",
+          "queueSize=140"
         ]
       },
       "metrics": [
         {
           "metricName": "avgTaskDurationMs",
-          "metricValue": "5000",
+          "metricValue": "8500",
+          "component": "Executor"
+        },
+        {
+          "metricName": "taskSleepMs",
+          "metricValue": "8000",
+          "component": "Executor"
+        },
+        {
+          "metricName": "queueSize",
+          "metricValue": "140",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "常见原因"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_active_threads_full",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "activeThreadCount 接近 maximumPoolSize，poolSize 已到最大值，线程资源紧张并伴随响应时间升高。",
+        "evidence": [
+          "activeThreadCount=31",
+          "maximumPoolSize=32",
+          "poolSize=32",
+          "avgTaskDurationMs=3400"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "activeThreadCount",
+          "metricValue": "31",
+          "component": "Executor"
+        },
+        {
+          "metricName": "poolSize",
+          "metricValue": "32",
+          "component": "Executor"
+        },
+        {
+          "metricName": "maximumPoolSize",
+          "metricValue": "32",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "核心指标"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_queue_size_high",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "queueSize 长时间接近 queueCapacity，队列过大造成请求延迟持续堆积，需要确认队列容量设置是否合理。",
+        "evidence": [
+          "queueSize=980",
+          "queueCapacity=1000",
+          "avgQueueWaitMs=12000",
+          "taskCount=5000"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "queueSize",
+          "metricValue": "980",
+          "component": "Executor"
+        },
+        {
+          "metricName": "queueCapacity",
+          "metricValue": "1000",
+          "component": "Executor"
+        },
+        {
+          "metricName": "avgQueueWaitMs",
+          "metricValue": "12000",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "风险提示"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_rejected_task_count_high",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "rejectedTaskCount 在短时间内快速增长，静默丢弃或直接抛异常都可能影响用户请求和数据完整性。",
+        "evidence": [
+          "rejectedTaskCount=160",
+          "rejectedExecutionHandler=AbortPolicy",
+          "activeThreadCount=32",
+          "queueSize=1000"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "rejectedTaskCount",
+          "metricValue": "160",
+          "component": "Executor"
+        },
+        {
+          "metricName": "activeThreadCount",
+          "metricValue": "32",
+          "component": "Executor"
+        },
+        {
+          "metricName": "queueSize",
+          "metricValue": "1000",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "风险提示"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_blocking_dependency",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "任务内部存在远程接口超时和阻塞 IO，worker 线程被长时间占用，导致 queueSize 和 avgTaskDurationMs 升高。",
+        "evidence": [
+          "remoteCallTimeoutCount=42",
+          "blockingIoCount=31",
+          "avgTaskDurationMs=9300",
+          "activeThreadCount=24"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "remoteCallTimeoutCount",
+          "metricValue": "42",
+          "component": "DownstreamService"
+        },
+        {
+          "metricName": "blockingIoCount",
+          "metricValue": "31",
+          "component": "Executor"
+        },
+        {
+          "metricName": "avgTaskDurationMs",
+          "metricValue": "9300",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_parameter_tuning",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "corePoolSize、maximumPoolSize 和 queueCapacity 与当前并发不匹配，需要结合 CPU、IO 和下游承载能力调整线程池参数。",
+        "evidence": [
+          "corePoolSize=4",
+          "maximumPoolSize=4",
+          "queueCapacity=50",
+          "taskCount=900",
+          "rejectedTaskCount=35"
+        ],
+        "suggestions": [
+          "review corePoolSize maximumPoolSize queueCapacity",
+          "evaluate downstream capacity before increasing threads"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "corePoolSize",
+          "metricValue": "4",
+          "component": "Executor"
+        },
+        {
+          "metricName": "maximumPoolSize",
+          "metricValue": "4",
+          "component": "Executor"
+        },
+        {
+          "metricName": "queueCapacity",
+          "metricValue": "50",
           "component": "Executor"
         }
       ]
@@ -180,6 +752,58 @@
       {
         "docId": "thread-pool-saturation",
         "section": "修复建议"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "thread_pool_isolation_suggestion",
+    "scenarioCode": "THREAD_POOL_SATURATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "THREAD_POOL_SATURATION",
+        "faultName": "线程池饱和",
+        "reason": "慢业务和核心业务共用同一个线程池，慢任务占满线程后其他业务也被拖慢，需要拆分业务线程池隔离。",
+        "evidence": [
+          "sharedExecutor=true",
+          "slowBusinessTaskCount=180",
+          "criticalTaskDelayMs=6500",
+          "activeThreadCount=20"
+        ],
+        "suggestions": [
+          "split business thread pools",
+          "isolate slow tasks from critical tasks"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "sharedExecutor",
+          "metricValue": "true",
+          "component": "Executor"
+        },
+        {
+          "metricName": "criticalTaskDelayMs",
+          "metricValue": "6500",
+          "component": "Executor"
+        },
+        {
+          "metricName": "slowBusinessTaskCount",
+          "metricValue": "180",
+          "component": "Executor"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "thread-pool-saturation",
+        "section": "修复建议"
+      },
+      {
+        "docId": "thread-pool-saturation",
+        "section": "常见原因"
       }
     ]
   },
@@ -190,18 +814,29 @@
       "ruleResult": {
         "faultType": "IDEMPOTENCY_CONFLICT",
         "faultName": "幂等冲突",
-        "reason": "同一个 Idempotency-Key 对应不同 requestHash，属于典型幂等冲突。",
+        "reason": "同一个 Idempotency-Key 对应不同 requestHash，hashMismatchCount 和 conflictCount 均大于 0，属于典型幂等冲突。",
         "evidence": [
-          "requestCount=5",
-          "hashMismatchCount=1",
-          "conflictCount=1"
+          "requestCount=12",
+          "hashMismatchCount=2",
+          "conflictCount=2",
+          "idempotencyKey=pay-20260810-001"
         ]
       },
       "metrics": [
         {
+          "metricName": "requestCount",
+          "metricValue": "12",
+          "component": "API"
+        },
+        {
           "metricName": "hashMismatchCount",
-          "metricValue": "1",
-          "component": "Redis"
+          "metricValue": "2",
+          "component": "Idempotency"
+        },
+        {
+          "metricName": "conflictCount",
+          "metricValue": "2",
+          "component": "Idempotency"
         }
       ]
     },
@@ -223,17 +858,28 @@
       "ruleResult": {
         "faultType": "IDEMPOTENCY_CONFLICT",
         "faultName": "幂等冲突",
-        "reason": "redisSetNxFailCount 增加，说明重复请求命中已有幂等 key，需要检查 SETNX 结果和幂等记录状态。",
+        "reason": "redisSetNxFailCount 增加，说明重复请求命中已有幂等 key，需要检查 Redis SETNX 结果和幂等记录状态。",
         "evidence": [
-          "duplicateCount=3",
-          "redisSetNxFailCount=3",
-          "rejectedDuplicateCount=3"
+          "duplicateCount=9",
+          "redisSetNxSuccessCount=1",
+          "redisSetNxFailCount=8",
+          "rejectedDuplicateCount=8"
         ]
       },
       "metrics": [
         {
+          "metricName": "duplicateCount",
+          "metricValue": "9",
+          "component": "API"
+        },
+        {
+          "metricName": "redisSetNxSuccessCount",
+          "metricValue": "1",
+          "component": "Redis"
+        },
+        {
           "metricName": "redisSetNxFailCount",
-          "metricValue": "3",
+          "metricValue": "8",
           "component": "Redis"
         }
       ]
@@ -242,6 +888,10 @@
       {
         "docId": "idempotency-conflict",
         "section": "排查步骤"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "核心指标"
       }
     ]
   },
@@ -252,18 +902,33 @@
       "ruleResult": {
         "faultType": "IDEMPOTENCY_CONFLICT",
         "faultName": "幂等冲突",
-        "reason": "只依赖 Redis 防重缺少数据库唯一索引兜底，Redis 异常时可能产生重复数据。",
+        "reason": "系统只依赖 Redis 防重，缺少数据库唯一索引兜底，Redis 异常后可能写入重复业务数据。",
         "evidence": [
-          "redisErrorCount=1",
-          "duplicateCount=2",
-          "unique index missing"
+          "redisErrorCount=3",
+          "duplicateBusinessRowCount=2",
+          "dbUniqueIndexExists=false",
+          "duplicateCount=4"
+        ],
+        "suggestions": [
+          "add database unique index",
+          "keep Redis as fast path only"
         ]
       },
       "metrics": [
         {
           "metricName": "redisErrorCount",
-          "metricValue": "1",
+          "metricValue": "3",
           "component": "Redis"
+        },
+        {
+          "metricName": "duplicateBusinessRowCount",
+          "metricValue": "2",
+          "component": "Database"
+        },
+        {
+          "metricName": "dbUniqueIndexExists",
+          "metricValue": "false",
+          "component": "Database"
         }
       ]
     },
@@ -275,6 +940,282 @@
       {
         "docId": "idempotency-conflict",
         "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_processing_state",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "重复请求命中 PROCESSING 状态，业务仍在处理中，需要检查幂等记录状态流转和异常路径更新。",
+        "evidence": [
+          "idempotencyState=PROCESSING",
+          "duplicateCount=6",
+          "avgCheckDurationMs=180",
+          "processingAgeMs=15000"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "duplicateCount",
+          "metricValue": "6",
+          "component": "API"
+        },
+        {
+          "metricName": "avgCheckDurationMs",
+          "metricValue": "180",
+          "component": "Idempotency"
+        },
+        {
+          "metricName": "processingAgeMs",
+          "metricValue": "15000",
+          "component": "Idempotency"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_success_result_reuse",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "重复请求命中 SUCCESS 状态，但服务没有复用历史响应结果，导致客户端继续重试并放大请求量。",
+        "evidence": [
+          "idempotencyState=SUCCESS",
+          "duplicateCount=14",
+          "historyResultReuse=false",
+          "rejectedDuplicateCount=14"
+        ],
+        "suggestions": [
+          "reuse previous success result",
+          "store processing state and response result"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "duplicateCount",
+          "metricValue": "14",
+          "component": "API"
+        },
+        {
+          "metricName": "historyResultReuse",
+          "metricValue": "false",
+          "component": "Idempotency"
+        },
+        {
+          "metricName": "rejectedDuplicateCount",
+          "metricValue": "14",
+          "component": "Idempotency"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "修复建议"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_redis_error",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "Redis 幂等记录访问异常，redisErrorCount 上升，系统需要明确 fail-open 或 fail-close 策略以避免重复写入。",
+        "evidence": [
+          "redisErrorCount=11",
+          "redisTimeoutMs=2300",
+          "duplicateCount=5",
+          "acceptedCount=5"
+        ],
+        "suggestions": [
+          "define fail-close for high-risk writes",
+          "verify DB unique index fallback"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "redisErrorCount",
+          "metricValue": "11",
+          "component": "Redis"
+        },
+        {
+          "metricName": "redisTimeoutMs",
+          "metricValue": "2300",
+          "component": "Redis"
+        },
+        {
+          "metricName": "acceptedCount",
+          "metricValue": "5",
+          "component": "API"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "风险提示"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_key_missing_or_unstable",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "客户端重试时 Idempotency-Key 缺失或每次重新生成，服务端无法识别同一业务请求，duplicateCount 与 requestCount 同时升高。",
+        "evidence": [
+          "missingKeyCount=7",
+          "unstableKeyCount=9",
+          "requestCount=30",
+          "duplicateCount=12"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "missingKeyCount",
+          "metricValue": "7",
+          "component": "API"
+        },
+        {
+          "metricName": "unstableKeyCount",
+          "metricValue": "9",
+          "component": "API"
+        },
+        {
+          "metricName": "duplicateCount",
+          "metricValue": "12",
+          "component": "Idempotency"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "常见原因"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_duplicate_submit",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "用户连续点击提交按钮，前端超时后重复发送请求，duplicateCount 与 rejectedDuplicateCount 增长。",
+        "evidence": [
+          "requestCount=25",
+          "duplicateCount=18",
+          "rejectedDuplicateCount=17",
+          "clientRetryCount=10"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "requestCount",
+          "metricValue": "25",
+          "component": "API"
+        },
+        {
+          "metricName": "duplicateCount",
+          "metricValue": "18",
+          "component": "Idempotency"
+        },
+        {
+          "metricName": "clientRetryCount",
+          "metricValue": "10",
+          "component": "Client"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "现象"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "idempotency_hash_mismatch",
+    "scenarioCode": "IDEMPOTENCY_CONFLICT",
+    "query": {
+      "ruleResult": {
+        "faultType": "IDEMPOTENCY_CONFLICT",
+        "faultName": "幂等冲突",
+        "reason": "服务端只校验 Idempotency-Key，没有校验 requestHash，同一个 key 被不同请求体复用后产生 hash mismatch 风险。",
+        "evidence": [
+          "idempotencyKey=order-submit-888",
+          "requestHash=hash_a/hash_b",
+          "hashMismatchCount=4",
+          "conflictCount=4"
+        ],
+        "suggestions": [
+          "persist requestHash",
+          "reject same key with different request body"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "hashMismatchCount",
+          "metricValue": "4",
+          "component": "Idempotency"
+        },
+        {
+          "metricName": "conflictCount",
+          "metricValue": "4",
+          "component": "Idempotency"
+        },
+        {
+          "metricName": "requestHashChecked",
+          "metricValue": "false",
+          "component": "Idempotency"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "idempotency-conflict",
+        "section": "风险提示"
+      },
+      {
+        "docId": "idempotency-conflict",
+        "section": "常见原因"
       }
     ]
   }
