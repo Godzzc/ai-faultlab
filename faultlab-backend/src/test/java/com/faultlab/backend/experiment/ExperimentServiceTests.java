@@ -6,6 +6,9 @@ import com.faultlab.backend.experiment.dto.StartExperimentResponse;
 import com.faultlab.backend.experiment.service.ExperimentRecordService;
 import com.faultlab.backend.experiment.service.ExperimentService;
 import com.faultlab.backend.scenario.FaultScenario;
+import com.faultlab.backend.scenario.cache.CacheAvalancheScenario;
+import com.faultlab.backend.scenario.cache.CacheBreakdownScenario;
+import com.faultlab.backend.scenario.cache.CachePenetrationScenario;
 import com.faultlab.backend.scenario.impl.IdempotencyConflictScenario;
 import com.faultlab.backend.scenario.impl.ThreadPoolSaturationScenario;
 import com.faultlab.backend.scenario.mq.MqBacklogScenario;
@@ -40,6 +43,9 @@ class ExperimentServiceTests {
     private final FaultScenario mqBacklogScenario = mock(FaultScenario.class);
     private final FaultScenario threadPoolSaturationScenario = mock(FaultScenario.class);
     private final FaultScenario idempotencyConflictScenario = mock(FaultScenario.class);
+    private final FaultScenario cachePenetrationScenario = mock(FaultScenario.class);
+    private final FaultScenario cacheBreakdownScenario = mock(FaultScenario.class);
+    private final FaultScenario cacheAvalancheScenario = mock(FaultScenario.class);
     private ExperimentService experimentService;
 
     @BeforeEach
@@ -50,10 +56,23 @@ class ExperimentServiceTests {
         when(threadPoolSaturationScenario.scenarioName()).thenReturn(ThreadPoolSaturationScenario.SCENARIO_NAME);
         when(idempotencyConflictScenario.scenarioCode()).thenReturn(ScenarioCode.IDEMPOTENCY_CONFLICT);
         when(idempotencyConflictScenario.scenarioName()).thenReturn(IdempotencyConflictScenario.SCENARIO_NAME);
+        when(cachePenetrationScenario.scenarioCode()).thenReturn(ScenarioCode.CACHE_PENETRATION);
+        when(cachePenetrationScenario.scenarioName()).thenReturn(CachePenetrationScenario.SCENARIO_NAME);
+        when(cacheBreakdownScenario.scenarioCode()).thenReturn(ScenarioCode.CACHE_BREAKDOWN);
+        when(cacheBreakdownScenario.scenarioName()).thenReturn(CacheBreakdownScenario.SCENARIO_NAME);
+        when(cacheAvalancheScenario.scenarioCode()).thenReturn(ScenarioCode.CACHE_AVALANCHE);
+        when(cacheAvalancheScenario.scenarioName()).thenReturn(CacheAvalancheScenario.SCENARIO_NAME);
         experimentService = new ExperimentService(
                 experimentRecordService,
                 traceManager,
-                List.of(mqBacklogScenario, threadPoolSaturationScenario, idempotencyConflictScenario)
+                List.of(
+                        mqBacklogScenario,
+                        threadPoolSaturationScenario,
+                        idempotencyConflictScenario,
+                        cachePenetrationScenario,
+                        cacheBreakdownScenario,
+                        cacheAvalancheScenario
+                )
         );
     }
 
@@ -127,6 +146,66 @@ class ExperimentServiceTests {
         );
         verify(idempotencyConflictScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
         assertThat(TraceContextHolder.get()).isNull();
+    }
+
+    @Test
+    void shouldStartCachePenetrationScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.CACHE_PENETRATION);
+        request.setParams(Map.of("requestCount", 100, "invalidKeyRatio", 0.8));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.CACHE_PENETRATION),
+                eq(CachePenetrationScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(cachePenetrationScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartCacheBreakdownScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.CACHE_BREAKDOWN);
+        request.setParams(Map.of("requestCount", 100, "hotKey", "hot:item:1", "concurrency", 20));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.CACHE_BREAKDOWN),
+                eq(CacheBreakdownScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(cacheBreakdownScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartCacheAvalancheScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.CACHE_AVALANCHE);
+        request.setParams(Map.of("keyCount", 50, "requestCount", 200, "sameTtl", true));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.CACHE_AVALANCHE),
+                eq(CacheAvalancheScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(cacheAvalancheScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
 
     @Test

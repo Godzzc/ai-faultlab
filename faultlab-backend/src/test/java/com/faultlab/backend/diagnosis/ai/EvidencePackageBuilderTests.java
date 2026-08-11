@@ -79,11 +79,32 @@ class EvidencePackageBuilderTests {
         verify(ruleDiagnosisService).diagnose("exp-1");
     }
 
+    @Test
+    void shouldBuildEvidencePackageForCacheFaultType() throws JsonProcessingException {
+        RuleDiagnosisResult ruleResult = ruleResult(ScenarioCode.CACHE_PENETRATION);
+        DiagnosisReport report = new DiagnosisReport();
+        report.setRuleResultJson(objectMapper.writeValueAsString(ruleResult));
+        when(faultExperimentMapper.selectOne(any(Wrapper.class))).thenReturn(experiment(ScenarioCode.CACHE_PENETRATION));
+        when(faultMetricMapper.selectList(any(Wrapper.class))).thenReturn(List.of(metric("cache.db.query.count", 80)));
+        when(traceQueryService.getTraceTree("trace-1")).thenReturn(new TraceTreeResponse("trace-1", List.of()));
+        when(diagnosisReportMapper.selectOne(any(Wrapper.class))).thenReturn(report);
+
+        AiDiagnosisRequest request = builder.build("exp-1");
+
+        assertThat(request.experiment().scenarioCode()).isEqualTo(ScenarioCode.CACHE_PENETRATION);
+        assertThat(request.ruleResult().getFaultType()).isEqualTo(ScenarioCode.CACHE_PENETRATION);
+        assertThat(request.metrics().get(0).metricName()).isEqualTo("cache.db.query.count");
+    }
+
     private FaultExperiment experiment() {
+        return experiment(ScenarioCode.MQ_BACKLOG);
+    }
+
+    private FaultExperiment experiment(String scenarioCode) {
         LocalDateTime now = LocalDateTime.now();
         FaultExperiment experiment = new FaultExperiment();
         experiment.setExperimentId("exp-1");
-        experiment.setScenarioCode(ScenarioCode.MQ_BACKLOG);
+        experiment.setScenarioCode(scenarioCode);
         experiment.setScenarioName("MQ 消息堆积");
         experiment.setStatus(ExperimentStatus.RUNNING);
         experiment.setTraceId("trace-1");
@@ -104,9 +125,13 @@ class EvidencePackageBuilderTests {
     }
 
     private RuleDiagnosisResult ruleResult() {
+        return ruleResult(ScenarioCode.MQ_BACKLOG);
+    }
+
+    private RuleDiagnosisResult ruleResult(String faultType) {
         RuleDiagnosisResult result = new RuleDiagnosisResult();
         result.setExperimentId("exp-1");
-        result.setFaultType(ScenarioCode.MQ_BACKLOG);
+        result.setFaultType(faultType);
         result.setFaultName("MQ 消息堆积");
         result.setConfidence(0.85);
         result.setMatched(true);

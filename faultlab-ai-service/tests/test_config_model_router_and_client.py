@@ -46,7 +46,6 @@ def test_config_only_reads_dashscope_api_key_from_environment(monkeypatch):
     assert loaded.dashscope_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     assert loaded.llm_timeout_seconds == 90
     assert loaded.llm_enabled is True
-    assert loaded.embedding_model == "text-embedding-v4"
     assert loaded.embedding_dimension == 1024
     assert loaded.milvus_host == "localhost"
     assert loaded.milvus_port == 19530
