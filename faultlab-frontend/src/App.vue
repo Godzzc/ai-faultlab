@@ -46,7 +46,101 @@ const scenarios = [
       { key: 'processingDelayMs', label: '处理延迟 ms', min: 0 },
     ],
   },
+  {
+    code: 'CACHE_PENETRATION',
+    name: '缓存穿透',
+    alias: 'Cache Penetration',
+    description: '大量请求查询不存在的数据，缓存和数据库都没有命中，导致请求持续打到 DB。可通过空值缓存、布隆过滤器或非法 key 限流进行治理。',
+    defaults: {
+      requestCount: 100,
+      invalidKeyRatio: 0.8,
+      enableNullCache: false,
+      enableBloomFilter: false,
+      dbDelayMs: 20,
+    },
+    fields: [
+      { key: 'requestCount', label: '请求总数', type: 'number', min: 1 },
+      { key: 'invalidKeyRatio', label: '非法 key 比例', type: 'number', min: 0, max: 1, step: 0.1 },
+      { key: 'dbDelayMs', label: 'DB 延迟 ms', type: 'number', min: 0 },
+      { key: 'enableNullCache', label: '启用空值缓存', type: 'boolean' },
+      { key: 'enableBloomFilter', label: '启用布隆过滤器', type: 'boolean' },
+    ],
+  },
+  {
+    code: 'CACHE_BREAKDOWN',
+    name: '缓存击穿',
+    alias: 'Cache Breakdown',
+    description: '热点 key 过期后，大量并发请求同时穿透到 DB，并重复触发缓存重建。可通过互斥锁、逻辑过期、热点 key 永不过期或异步刷新治理。',
+    defaults: {
+      requestCount: 100,
+      hotKey: 'hot:item:1',
+      concurrency: 20,
+      rebuildDelayMs: 100,
+      enableMutex: false,
+      enableLogicalExpire: false,
+    },
+    fields: [
+      { key: 'requestCount', label: '请求总数', type: 'number', min: 1 },
+      { key: 'hotKey', label: '热点 key', type: 'text' },
+      { key: 'concurrency', label: '并发数', type: 'number', min: 1 },
+      { key: 'rebuildDelayMs', label: '重建延迟 ms', type: 'number', min: 0 },
+      { key: 'enableMutex', label: '启用互斥锁', type: 'boolean' },
+      { key: 'enableLogicalExpire', label: '启用逻辑过期', type: 'boolean' },
+    ],
+  },
+  {
+    code: 'CACHE_AVALANCHE',
+    name: '缓存雪崩',
+    alias: 'Cache Avalanche',
+    description: '大量 key 同时过期或 Redis 短时间不可用，导致请求大面积打到 DB。可通过 TTL 随机化、缓存预热、多级缓存、限流降级和本地缓存兜底治理。',
+    defaults: {
+      keyCount: 50,
+      requestCount: 200,
+      sameTtl: true,
+      enableTtlJitter: false,
+      simulateRedisDown: false,
+      enableFallback: false,
+      dbDelayMs: 20,
+    },
+    fields: [
+      { key: 'keyCount', label: '缓存 key 数', type: 'number', min: 1 },
+      { key: 'requestCount', label: '请求总数', type: 'number', min: 1 },
+      { key: 'dbDelayMs', label: 'DB 延迟 ms', type: 'number', min: 0 },
+      { key: 'sameTtl', label: '相同 TTL', type: 'boolean' },
+      { key: 'enableTtlJitter', label: '启用 TTL 随机化', type: 'boolean' },
+      { key: 'simulateRedisDown', label: '模拟 Redis 不可用', type: 'boolean' },
+      { key: 'enableFallback', label: '启用本地兜底', type: 'boolean' },
+    ],
+  },
 ]
+
+const cacheMetricNames = {
+  CACHE_PENETRATION: [
+    'cache.request.count',
+    'cache.miss.rate',
+    'cache.db.query.count',
+    'cache.invalid.key.count',
+    'cache.null.cache.write.count',
+    'cache.bloom.reject.count',
+  ],
+  CACHE_BREAKDOWN: [
+    'cache.hot.key.request.count',
+    'cache.hot.key.miss.count',
+    'cache.db.query.count',
+    'cache.rebuild.count',
+    'cache.lock.acquire.count',
+    'cache.lock.fail.count',
+  ],
+  CACHE_AVALANCHE: [
+    'cache.key.count',
+    'cache.expired.key.count',
+    'cache.unavailable.count',
+    'cache.miss.rate',
+    'cache.db.query.count',
+    'cache.fallback.count',
+    'cache.request.error.count',
+  ],
+}
 
 const selectedScenarioCode = ref(scenarios[0].code)
 const params = reactive({ ...scenarios[0].defaults })
@@ -170,6 +264,21 @@ const evaluationSummaries = computed(() => {
   if (!evaluationResult.value) return []
   const summaries = evaluationResult.value.summaries ?? [evaluationResult.value]
   return summaries.filter(Boolean)
+})
+
+const activeScenarioCode = computed(() => experiment.value?.scenarioCode || selectedScenarioCode.value)
+
+const cacheMetricHighlights = computed(() => {
+  const names = cacheMetricNames[activeScenarioCode.value]
+  if (!names || metrics.value.length === 0) return []
+  return names.map((name) => {
+    const metric = metrics.value.find((item) => item.metricName === name)
+    return {
+      name,
+      value: metric?.metricValue,
+      unit: metric?.metricUnit,
+    }
+  })
 })
 
 function selectScenario(code) {
@@ -340,7 +449,12 @@ async function generateAiDiagnosis() {
 
 function normalizedParams() {
   return Object.fromEntries(
-    Object.entries(params).map(([key, value]) => [key, Number(value)]),
+    selectedScenario.value.fields.map((field) => {
+      const value = params[field.key]
+      if (field.type === 'boolean') return [field.key, Boolean(value)]
+      if (field.type === 'text') return [field.key, String(value ?? '').trim()]
+      return [field.key, Number(value)]
+    }),
   )
 }
 
@@ -439,7 +553,7 @@ function formatMetadata(metadata) {
             @click="selectScenario(scenario.code)"
           >
             <strong>{{ scenario.name }}</strong>
-            <small>{{ scenario.code }}</small>
+            <small>{{ scenario.alias ? `${scenario.alias} / ${scenario.code}` : scenario.code }}</small>
             <span>{{ scenario.description }}</span>
           </button>
         </div>
@@ -448,10 +562,31 @@ function formatMetadata(metadata) {
           <h2>参数配置</h2>
         </div>
         <div class="form-grid">
-          <label v-for="field in selectedScenario.fields" :key="field.key" class="field">
-            <span>{{ field.label }}</span>
-            <input v-model.number="params[field.key]" type="number" :min="field.min" />
+          <label
+            v-for="field in selectedScenario.fields"
+            :key="field.key"
+            class="field"
+            :class="{ 'check-field form-check-field': field.type === 'boolean' }"
+          >
+            <template v-if="field.type === 'boolean'">
+              <input v-model="params[field.key]" type="checkbox" />
+              <span>{{ field.label }}</span>
+            </template>
+            <template v-else>
+              <span>{{ field.label }}</span>
+              <input
+                v-model="params[field.key]"
+                :type="field.type === 'text' ? 'text' : 'number'"
+                :min="field.min"
+                :max="field.max"
+                :step="field.step ?? 1"
+              />
+            </template>
           </label>
+        </div>
+
+        <div v-if="selectedScenario.alias" class="scenario-note">
+          {{ selectedScenario.description }}
         </div>
 
         <label class="field">
@@ -636,6 +771,17 @@ function formatMetadata(metadata) {
           <div class="section-heading">
             <h2>指标表格</h2>
             <span>{{ metrics.length }} items</span>
+          </div>
+          <div v-if="cacheMetricHighlights.length" class="cache-metric-grid">
+            <article
+              v-for="metric in cacheMetricHighlights"
+              :key="metric.name"
+              class="cache-metric-card"
+            >
+              <span>{{ metric.name }}</span>
+              <strong>{{ formatValue(metric.value) }}</strong>
+              <small>{{ formatValue(metric.unit) }}</small>
+            </article>
           </div>
           <div class="table-wrap">
             <table v-if="metrics.length">
