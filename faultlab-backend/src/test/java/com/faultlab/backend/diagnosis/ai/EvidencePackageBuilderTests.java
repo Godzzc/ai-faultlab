@@ -96,6 +96,23 @@ class EvidencePackageBuilderTests {
         assertThat(request.metrics().get(0).metricName()).isEqualTo("cache.db.query.count");
     }
 
+    @Test
+    void shouldBuildEvidencePackageForDbFaultType() throws JsonProcessingException {
+        RuleDiagnosisResult ruleResult = ruleResult(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION);
+        DiagnosisReport report = new DiagnosisReport();
+        report.setRuleResultJson(objectMapper.writeValueAsString(ruleResult));
+        when(faultExperimentMapper.selectOne(any(Wrapper.class))).thenReturn(experiment(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION));
+        when(faultMetricMapper.selectList(any(Wrapper.class))).thenReturn(List.of(metric("db.connection.acquire.timeout.count", 90)));
+        when(traceQueryService.getTraceTree("trace-1")).thenReturn(new TraceTreeResponse("trace-1", List.of()));
+        when(diagnosisReportMapper.selectOne(any(Wrapper.class))).thenReturn(report);
+
+        AiDiagnosisRequest request = builder.build("exp-1");
+
+        assertThat(request.experiment().scenarioCode()).isEqualTo(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION);
+        assertThat(request.ruleResult().getFaultType()).isEqualTo(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION);
+        assertThat(request.metrics().get(0).metricName()).isEqualTo("db.connection.acquire.timeout.count");
+    }
+
     private FaultExperiment experiment() {
         return experiment(ScenarioCode.MQ_BACKLOG);
     }

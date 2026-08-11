@@ -8,6 +8,9 @@ public final class ScenarioCode {
     public static final String CACHE_PENETRATION = "CACHE_PENETRATION";
     public static final String CACHE_BREAKDOWN = "CACHE_BREAKDOWN";
     public static final String CACHE_AVALANCHE = "CACHE_AVALANCHE";
+    public static final String DB_SLOW_QUERY = "DB_SLOW_QUERY";
+    public static final String DB_LOCK_CONTENTION = "DB_LOCK_CONTENTION";
+    public static final String DB_CONNECTION_POOL_EXHAUSTION = "DB_CONNECTION_POOL_EXHAUSTION";
 
     private ScenarioCode() {
     }
