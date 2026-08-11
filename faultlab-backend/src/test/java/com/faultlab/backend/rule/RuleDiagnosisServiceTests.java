@@ -11,6 +11,7 @@ import com.faultlab.backend.experiment.mapper.FaultExperimentMapper;
 import com.faultlab.backend.metric.entity.FaultMetric;
 import com.faultlab.backend.metric.mapper.FaultMetricMapper;
 import com.faultlab.backend.rule.diagnoser.CacheFailureRuleDiagnoser;
+import com.faultlab.backend.rule.diagnoser.DbFailureRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.IdempotencyConflictRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.MqBacklogRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.RuleDiagnoser;
@@ -120,6 +121,22 @@ class RuleDiagnosisServiceTests {
     }
 
     @Test
+    void shouldDiagnoseDbScenarios() {
+        RuleDiagnosisService service = service(List.of(new DbFailureRuleDiagnoser()), objectMapper);
+        when(faultExperimentMapper.selectOne(any(Wrapper.class))).thenReturn(experiment(ScenarioCode.DB_SLOW_QUERY));
+        when(faultMetricMapper.selectList(any(Wrapper.class))).thenReturn(dbSlowQueryMetrics());
+        when(diagnosisReportMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        RuleDiagnosisResult result = service.diagnose("exp-1");
+
+        ArgumentCaptor<DiagnosisReport> captor = ArgumentCaptor.forClass(DiagnosisReport.class);
+        verify(diagnosisReportMapper).insert(captor.capture());
+        assertThat(result.getMatched()).isTrue();
+        assertThat(result.getFaultType()).isEqualTo(ScenarioCode.DB_SLOW_QUERY);
+        assertThat(captor.getValue().getRuleResultJson()).contains("\"faultType\":\"DB_SLOW_QUERY\"");
+    }
+
+    @Test
     void shouldUpdateDiagnosisReportWhenExists() {
         RuleDiagnosisService service = service(List.of(new MqBacklogRuleDiagnoser()), objectMapper);
         DiagnosisReport existingReport = new DiagnosisReport();
@@ -211,6 +228,19 @@ class RuleDiagnosisServiceTests {
                 metric("cache.invalid.key.count", 80),
                 metric("cache.bloom.reject.count", 0),
                 metric("cache.null.cache.write.count", 0)
+        );
+    }
+
+    private List<FaultMetric> dbSlowQueryMetrics() {
+        return List.of(
+                metric("db.query.count", 100),
+                metric("db.slow.query.count", 100),
+                metric("db.slow.query.rate", 1),
+                metric("db.avg.query.ms", 80),
+                metric("db.max.query.ms", 96),
+                metric("db.full.scan.count", 100),
+                metric("db.scanned.rows", 80000),
+                metric("db.table.size", 100000)
         );
     }
 

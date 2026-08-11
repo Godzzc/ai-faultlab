@@ -133,3 +133,104 @@ GET  /api/diagnosis/{experimentId}
 ```
 
 EvidencePackage includes the experiment `scenarioCode`, metrics, trace tree, and `RuleDiagnosisResult` for `CACHE_PENETRATION`, `CACHE_BREAKDOWN`, and `CACHE_AVALANCHE`.
+
+## DB Slow Query
+
+Scenario code: `DB_SLOW_QUERY`
+
+Params:
+
+```json
+{
+  "requestCount": 100,
+  "queryMode": "FULL_SCAN",
+  "tableSize": 100000,
+  "scannedRows": 80000,
+  "dbDelayMs": 80,
+  "enableIndexOptimization": false
+}
+```
+
+`queryMode` supports `INDEXED` and `FULL_SCAN`.
+
+Metrics:
+
+- `db.query.count`
+- `db.slow.query.count`
+- `db.slow.query.rate`
+- `db.avg.query.ms`
+- `db.max.query.ms`
+- `db.full.scan.count`
+- `db.index.hit.count`
+- `db.scanned.rows`
+- `db.table.size`
+- `api.avg.latency.ms`
+
+Rule diagnosis matches when slow query rate, average query latency, full scan count, or scanned rows indicate slow SQL risk.
+
+## DB Lock Contention
+
+Scenario code: `DB_LOCK_CONTENTION`
+
+Params:
+
+```json
+{
+  "requestCount": 50,
+  "concurrency": 10,
+  "targetRowId": "order:1",
+  "lockHoldMs": 200,
+  "lockWaitTimeoutMs": 100,
+  "enableShortTransaction": false
+}
+```
+
+Metrics:
+
+- `db.lock.request.count`
+- `db.lock.wait.count`
+- `db.lock.wait.rate`
+- `db.lock.wait.ms`
+- `db.avg.lock.wait.ms`
+- `db.max.lock.wait.ms`
+- `db.long.transaction.count`
+- `db.transaction.active.count`
+- `db.update.success.count`
+- `db.update.timeout.count`
+- `api.timeout.count`
+
+Rule diagnosis matches when lock waits, average wait time, update timeout count, or long transaction count indicate row lock contention.
+
+## DB Connection Pool Exhaustion
+
+Scenario code: `DB_CONNECTION_POOL_EXHAUSTION`
+
+Params:
+
+```json
+{
+  "requestCount": 100,
+  "concurrency": 30,
+  "maxPoolSize": 10,
+  "queryDelayMs": 200,
+  "connectionAcquireTimeoutMs": 50,
+  "enableFastRelease": false
+}
+```
+
+Metrics:
+
+- `db.pool.max.size`
+- `db.pool.active.count`
+- `db.pool.idle.count`
+- `db.connection.acquire.count`
+- `db.connection.acquire.timeout.count`
+- `db.connection.acquire.timeout.rate`
+- `db.connection.acquire.avg.ms`
+- `db.connection.hold.avg.ms`
+- `db.query.count`
+- `api.error.count`
+
+Rule diagnosis matches when acquire timeout count, active pool saturation, acquire wait time, or API error count indicates pool exhaustion.
+
+The existing diagnosis endpoints support the database fault types without a contract change. EvidencePackage includes the experiment `scenarioCode`, metrics, trace tree, and `RuleDiagnosisResult` for `DB_SLOW_QUERY`, `DB_LOCK_CONTENTION`, and `DB_CONNECTION_POOL_EXHAUSTION`.

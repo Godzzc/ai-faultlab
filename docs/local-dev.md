@@ -476,6 +476,64 @@ POST /api/diagnosis/{experimentId}/ai/generate
 
 The scenarios use deterministic in-process simulation for Redis/DB/cache fallback behavior. They do not require new infrastructure beyond the normal local stack and do not call `flushAll`.
 
+## Database Bottleneck Scenario Local Checks
+
+The v0.10.0 database bottleneck drills also run through the same Java backend API:
+
+```text
+POST http://localhost:8080/api/experiments/start
+```
+
+Slow SQL / full scan:
+
+```json
+{
+  "scenarioCode": "DB_SLOW_QUERY",
+  "params": {
+    "requestCount": 100,
+    "queryMode": "FULL_SCAN",
+    "tableSize": 100000,
+    "scannedRows": 80000,
+    "dbDelayMs": 80,
+    "enableIndexOptimization": false
+  }
+}
+```
+
+Lock contention:
+
+```json
+{
+  "scenarioCode": "DB_LOCK_CONTENTION",
+  "params": {
+    "requestCount": 50,
+    "concurrency": 10,
+    "targetRowId": "order:1",
+    "lockHoldMs": 200,
+    "lockWaitTimeoutMs": 100,
+    "enableShortTransaction": false
+  }
+}
+```
+
+Connection pool exhaustion:
+
+```json
+{
+  "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 30,
+    "maxPoolSize": 10,
+    "queryDelayMs": 200,
+    "connectionAcquireTimeoutMs": 50,
+    "enableFastRelease": false
+  }
+}
+```
+
+These scenarios are deterministic local simulations. They do not create large MySQL tables, open real long transactions, modify HikariCP settings, exhaust real database connections, or run load tests.
+
 ## Cache Runbook Evaluation Local Checks
 
 The Python AI service includes v0.9.0 cache Runbooks and retrieval evaluation cases:

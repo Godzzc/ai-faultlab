@@ -9,6 +9,9 @@ import com.faultlab.backend.scenario.FaultScenario;
 import com.faultlab.backend.scenario.cache.CacheAvalancheScenario;
 import com.faultlab.backend.scenario.cache.CacheBreakdownScenario;
 import com.faultlab.backend.scenario.cache.CachePenetrationScenario;
+import com.faultlab.backend.scenario.db.DbConnectionPoolExhaustionScenario;
+import com.faultlab.backend.scenario.db.DbLockContentionScenario;
+import com.faultlab.backend.scenario.db.DbSlowQueryScenario;
 import com.faultlab.backend.scenario.impl.IdempotencyConflictScenario;
 import com.faultlab.backend.scenario.impl.ThreadPoolSaturationScenario;
 import com.faultlab.backend.scenario.mq.MqBacklogScenario;
@@ -46,6 +49,9 @@ class ExperimentServiceTests {
     private final FaultScenario cachePenetrationScenario = mock(FaultScenario.class);
     private final FaultScenario cacheBreakdownScenario = mock(FaultScenario.class);
     private final FaultScenario cacheAvalancheScenario = mock(FaultScenario.class);
+    private final FaultScenario dbSlowQueryScenario = mock(FaultScenario.class);
+    private final FaultScenario dbLockContentionScenario = mock(FaultScenario.class);
+    private final FaultScenario dbConnectionPoolExhaustionScenario = mock(FaultScenario.class);
     private ExperimentService experimentService;
 
     @BeforeEach
@@ -62,6 +68,12 @@ class ExperimentServiceTests {
         when(cacheBreakdownScenario.scenarioName()).thenReturn(CacheBreakdownScenario.SCENARIO_NAME);
         when(cacheAvalancheScenario.scenarioCode()).thenReturn(ScenarioCode.CACHE_AVALANCHE);
         when(cacheAvalancheScenario.scenarioName()).thenReturn(CacheAvalancheScenario.SCENARIO_NAME);
+        when(dbSlowQueryScenario.scenarioCode()).thenReturn(ScenarioCode.DB_SLOW_QUERY);
+        when(dbSlowQueryScenario.scenarioName()).thenReturn(DbSlowQueryScenario.SCENARIO_NAME);
+        when(dbLockContentionScenario.scenarioCode()).thenReturn(ScenarioCode.DB_LOCK_CONTENTION);
+        when(dbLockContentionScenario.scenarioName()).thenReturn(DbLockContentionScenario.SCENARIO_NAME);
+        when(dbConnectionPoolExhaustionScenario.scenarioCode()).thenReturn(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION);
+        when(dbConnectionPoolExhaustionScenario.scenarioName()).thenReturn(DbConnectionPoolExhaustionScenario.SCENARIO_NAME);
         experimentService = new ExperimentService(
                 experimentRecordService,
                 traceManager,
@@ -71,7 +83,10 @@ class ExperimentServiceTests {
                         idempotencyConflictScenario,
                         cachePenetrationScenario,
                         cacheBreakdownScenario,
-                        cacheAvalancheScenario
+                        cacheAvalancheScenario,
+                        dbSlowQueryScenario,
+                        dbLockContentionScenario,
+                        dbConnectionPoolExhaustionScenario
                 )
         );
     }
@@ -206,6 +221,66 @@ class ExperimentServiceTests {
                 eq(response.getTraceId())
         );
         verify(cacheAvalancheScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartDbSlowQueryScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.DB_SLOW_QUERY);
+        request.setParams(Map.of("requestCount", 100, "queryMode", "FULL_SCAN"));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.DB_SLOW_QUERY),
+                eq(DbSlowQueryScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(dbSlowQueryScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartDbLockContentionScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.DB_LOCK_CONTENTION);
+        request.setParams(Map.of("requestCount", 50, "concurrency", 10, "targetRowId", "order:1"));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.DB_LOCK_CONTENTION),
+                eq(DbLockContentionScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(dbLockContentionScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartDbConnectionPoolExhaustionScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION);
+        request.setParams(Map.of("requestCount", 100, "concurrency", 30, "maxPoolSize", 10));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION),
+                eq(DbConnectionPoolExhaustionScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(dbConnectionPoolExhaustionScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
 
     @Test
