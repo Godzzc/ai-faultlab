@@ -278,6 +278,20 @@ h3 {
   background: #ffffff;
 }
 
+.form-check-field {
+  align-self: end;
+  min-height: 38px;
+}
+
+.scenario-note {
+  padding: 10px 12px;
+  border: 1px solid #bae6fd;
+  border-radius: 7px;
+  background: #f0f9ff;
+  color: #075985;
+  font-size: 13px;
+}
+
 .field select:focus {
   border-color: var(--accent);
   background: #ffffff;
@@ -408,6 +422,38 @@ li + li {
 .table-wrap {
   width: 100%;
   overflow-x: auto;
+}
+
+.cache-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cache-metric-card {
+  min-height: 84px;
+  padding: 12px;
+  border: 1px solid #bae6fd;
+  border-radius: 7px;
+  background: #f0f9ff;
+}
+
+.cache-metric-card span,
+.cache-metric-card small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #0369a1;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.cache-metric-card strong {
+  display: block;
+  margin: 8px 0 5px;
+  overflow-wrap: anywhere;
+  color: #0f172a;
+  font-size: 18px;
 }
 
 table {
@@ -732,6 +778,10 @@ td {
   .metric-card-grid {
     grid-template-columns: 1fr 1fr;
   }
+
+  .cache-metric-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 680px) {
@@ -758,6 +808,10 @@ td {
   }
 
   .metric-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cache-metric-grid {
     grid-template-columns: 1fr;
   }
 }
