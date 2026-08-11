@@ -328,6 +328,33 @@ The output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`
 
 This path does not call the LLM and has no frontend UI or visualization chart. BM25 debug works without Milvus. Vector debug requires Milvus and embeddings; when Milvus is unavailable, the response should still include BM25 results and a warning.
 
+### Runbook Management and Index Tasks
+
+Runbook management stays local Markdown based:
+
+```text
+GET http://localhost:8000/ai/runbooks
+GET http://localhost:8000/ai/runbooks/mq-backlog
+POST http://localhost:8000/ai/runbooks
+PUT http://localhost:8000/ai/runbooks/mq-backlog
+DELETE http://localhost:8000/ai/runbooks/mq-backlog
+```
+
+Index tasks:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index-tasks" -ContentType "application/json" -Body '{"forceRebuild":false}'
+Invoke-RestMethod -Method Get -Uri "http://localhost:8000/ai/runbooks/index-tasks"
+```
+
+The old endpoint is still valid:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index" -ContentType "application/json" -Body '{"forceRebuild":false}'
+```
+
+Task records are stored in `faultlab-ai-service/data/runbook_index_tasks.json` and ignored by Git. This is not MySQL-backed Runbook management, not an async task queue, and not a permission, audit, or approval workflow.
+
 ## RAG v0.5 Demo
 
 完整演示文档见 [RAG v0.5 Demo Guide](./rag-v0.5-demo-guide.md)。架构说明见 [RAG Architecture](./rag-architecture.md)，评测说明见 [RAG Evaluation Guide](./rag-evaluation-guide.md)，面试复盘见 [RAG Interview Guide](./rag-interview-guide.md)。

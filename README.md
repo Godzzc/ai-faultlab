@@ -308,6 +308,8 @@ Dataset:
 faultlab-ai-service/evaluation/rag_eval_cases.json
 ```
 
+The evaluation dataset now contains 27 cases, expanded from the original 9-case baseline. It covers more detailed MQ backlog, thread pool saturation, and idempotency conflict situations while keeping expected references strict at `docId + section`.
+
 Metrics:
 
 - Hit@K
@@ -342,7 +344,7 @@ POST http://localhost:8000/ai/runbooks/evaluate
 body: {"retriever": "all", "topK": 3, "report": true}
 ```
 
-The report suggestions are rule-based and do not call the LLM. Future extensions can add more cases, nDCG, retrieval result visualization, and stricter CI regression thresholds.
+The report suggestions are rule-based and do not call the LLM. After expanding the dataset, retrieval metrics may decrease because the baseline is stricter; this should be read as improved evaluation coverage, not necessarily system degradation. Follow-up tuning should use miss cases to improve Runbook keywords, query construction, BM25-like scoring, and rerank weights. Future extensions can add nDCG, retrieval result visualization, and stricter CI regression thresholds.
 
 ### RAG Evaluation Regression Gate
 
@@ -382,6 +384,30 @@ python scripts/debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --
 ```
 
 The debug response includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus; vector debug requires Milvus and embeddings to be available.
+
+### Runbook Management and Index Task Basic
+
+`faultlab-ai-service` now includes local Markdown Runbook management APIs and a synchronous index task record.
+
+Runbook APIs:
+
+```text
+GET /ai/runbooks
+GET /ai/runbooks/{docId}
+POST /ai/runbooks
+PUT /ai/runbooks/{docId}
+DELETE /ai/runbooks/{docId}
+```
+
+Index task APIs:
+
+```text
+POST /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks/{taskId}
+```
+
+The existing `POST /ai/runbooks/index` remains compatible and now also returns `taskId`. Task records are stored locally in `faultlab-ai-service/data/runbook_index_tasks.json`, which is ignored by Git. This is still local Markdown plus JSON state, not MySQL-backed Runbook management, not an async indexing queue, and not an approval or permission system.
 
 ## RAG v0.5 Documentation
 

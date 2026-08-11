@@ -1,10 +1,20 @@
 import math
 from collections import Counter
+from dataclasses import dataclass
 from typing import Any
 
 from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever, TOKEN_PATTERN
 from app.retrieval.models import RunbookChunk
+from app.retrieval.query_builder import build_retrieval_query
 from app.schemas import DiagnosisRequest
+
+
+@dataclass(frozen=True)
+class QuerySignals:
+    terms: list[str]
+    metric_names: set[str]
+    evidence_keys: set[str]
+    section_intents: dict[str, float]
 
 
 class Bm25RunbookRetriever(KeywordRunbookRetriever):
@@ -21,8 +31,8 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
         if not chunks:
             return []
 
-        query_terms = self._extract_query_terms(request, trace_summary)
-        if not query_terms:
+        query_signals = self._extract_query_signals(request, trace_summary)
+        if not query_signals.terms:
             return []
 
         doc_terms = [self._content_terms(chunk) for chunk in chunks]
@@ -33,7 +43,7 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             self._with_bm25_like_score(
                 chunk,
                 terms,
-                query_terms,
+                query_signals,
                 document_frequency,
                 len(chunks),
                 average_length,
@@ -50,18 +60,20 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
         request: DiagnosisRequest,
         trace_summary: dict[str, Any],
     ) -> list[str]:
-        values: list[Any] = []
-        if request.rule_result:
-            values.extend([
-                request.rule_result.fault_type,
-                request.rule_result.fault_name,
-                request.rule_result.reason,
-                request.rule_result.evidence,
-            ])
-        values.append(request.experiment.scenario_code)
-        values.append([metric.model_dump(by_alias=True) for metric in request.metrics])
-        values.append(trace_summary)
-        return list(self._tokens_from_value(values))
+        return self._extract_query_signals(request, trace_summary).terms
+
+    def _extract_query_signals(
+        self,
+        request: DiagnosisRequest,
+        trace_summary: dict[str, Any],
+    ) -> QuerySignals:
+        query_text = build_retrieval_query(request, trace_summary)
+        return QuerySignals(
+            terms=self._dedupe_terms(self._tokens_from_value(query_text)),
+            metric_names=self._metric_names(request),
+            evidence_keys=self._evidence_keys(request),
+            section_intents=self._section_intents(request),
+        )
 
     def _content_terms(self, chunk: RunbookChunk) -> list[str]:
         values = [
@@ -88,7 +100,7 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
         self,
         chunk: RunbookChunk,
         terms: list[str],
-        query_terms: list[str],
+        query_signals: QuerySignals,
         document_frequency: dict[str, int],
         document_count: int,
         average_length: float,
@@ -98,12 +110,13 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
         title_tokens = self._tokens_from_value(chunk.title)
         section_tokens = self._tokens_from_value(chunk.section)
         keyword_tokens = self._tokens_from_value(" ".join(chunk.keywords))
+        content_tokens = self._tokens_from_value(chunk.content)
         content_length = max(len(terms), 1)
         k1 = 1.5
         b = 0.75
 
         score = 0.0
-        for term in query_terms:
+        for term in query_signals.terms:
             tf = term_counts.get(term, 0)
             if tf <= 0:
                 continue
@@ -113,15 +126,33 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
                 tf + k1 * (1 - b + b * content_length / max(average_length, 1))
             )
             term_score = idf * normalized_tf
+            # Keep field boosts explicit: front matter keywords and section titles
+            # should guide strict docId+section matching, while content hits still matter.
             if term in keyword_tokens:
-                term_score *= 3.0
-            elif term in title_tokens or term in section_tokens:
-                term_score *= 2.0
+                term_score *= 3.2
+            elif term in section_tokens:
+                term_score *= 2.8
+            elif term in title_tokens:
+                term_score *= 1.8
             score += term_score
 
         if fault_type and chunk.faultType == fault_type:
-            score += 5.0
-        score = score / (1 + content_length / 500)
+            score += 6.0
+
+        metric_hits = query_signals.metric_names & (keyword_tokens | content_tokens | section_tokens)
+        evidence_key_hits = query_signals.evidence_keys & (keyword_tokens | content_tokens | section_tokens)
+        if metric_hits:
+            score += min(4.5, 1.15 * len(metric_hits))
+        if evidence_key_hits:
+            score += min(3.0, 0.75 * len(evidence_key_hits))
+
+        section_intent_boost = query_signals.section_intents.get(chunk.section, 0.0)
+        if section_intent_boost:
+            score += section_intent_boost
+
+        # Light normalization prevents verbose sections from winning purely by
+        # carrying more terms, without erasing useful dense keyword matches.
+        score = score / (1 + content_length / 650)
 
         metadata = {
             **(chunk.metadata or {}),
@@ -139,3 +170,119 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             source="bm25",
             metadata=metadata,
         )
+
+    def _dedupe_terms(self, terms: set[str]) -> list[str]:
+        return sorted(term for term in terms if term)
+
+    def _metric_names(self, request: DiagnosisRequest) -> set[str]:
+        return {
+            metric.metric_name.lower()
+            for metric in request.metrics or []
+            if metric.metric_name
+        }
+
+    def _evidence_keys(self, request: DiagnosisRequest) -> set[str]:
+        keys: set[str] = set()
+        if not request.rule_result:
+            return keys
+        for item in request.rule_result.evidence or []:
+            text = str(item or "")
+            if "=" not in text:
+                continue
+            key = text.split("=", 1)[0].strip().lower()
+            if key:
+                keys.add(key)
+        return keys
+
+    def _section_intents(self, request: DiagnosisRequest) -> dict[str, float]:
+        values: list[Any] = [request.experiment.scenario_code]
+        if request.rule_result:
+            values.extend([
+                request.rule_result.fault_type,
+                request.rule_result.fault_name,
+                request.rule_result.reason,
+                request.rule_result.evidence,
+                request.rule_result.suggestions,
+            ])
+        values.extend(metric.model_dump(by_alias=True) for metric in request.metrics or [])
+        tokens = {
+            token.lower()
+            for value in values
+            for token in self._tokens_from_value(value)
+        }
+
+        suggestions = request.rule_result.suggestions if request.rule_result else []
+        intents = {
+            "核心指标": 0.0,
+            "常见原因": 0.0,
+            "排查步骤": 0.0,
+            "修复建议": 0.0,
+            "风险提示": 0.0,
+        }
+        if tokens & {
+            "reason",
+            "cause",
+            "root",
+            "slow",
+            "slowsqlcount",
+            "downstream",
+            "blocking",
+            "hashmismatchcount",
+            "missingkeycount",
+            "unstablekeycount",
+        }:
+            intents["常见原因"] += 1.25
+        if suggestions or tokens & {
+            "suggestion",
+            "suggestions",
+            "fix",
+            "remediation",
+            "increase",
+            "optimize",
+            "configure",
+            "split",
+            "isolate",
+            "reuse",
+            "add",
+        }:
+            intents["修复建议"] += 1.35
+        if tokens & {
+            "metricname",
+            "metricvalue",
+            "evidence",
+            "publishcount",
+            "backlogcount",
+            "activethreadcount",
+            "rejectedtaskcount",
+            "hashmismatchcount",
+            "redissetnxfailcount",
+            "duplicatecount",
+        }:
+            intents["核心指标"] += 1.2
+        if tokens & {
+            "check",
+            "inspect",
+            "verify",
+            "diagnose",
+            "setnx",
+            "processing",
+            "downstream",
+            "queuecapacity",
+            "rejectedexecutionhandler",
+        }:
+            intents["排查步骤"] += 1.15
+        if tokens & {
+            "risk",
+            "deadlettercount",
+            "dlq",
+            "retrycount",
+            "redelivercount",
+            "rejectedtaskcount",
+            "rediserrorcount",
+            "redistimeoutms",
+            "queuecapacity",
+            "hashmismatchcount",
+            "dbuniqueindexexists",
+        }:
+            intents["风险提示"] += 1.25
+        return {section: boost for section, boost in intents.items() if boost > 0}

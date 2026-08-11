@@ -1,5 +1,23 @@
 # AI FaultLab RAG Architecture
 
+## Runbook Management and Index Task Basic
+
+The v0.5 RAG implementation now includes local Runbook Management Basic and Index Task Basic. Runbooks remain Markdown files under `faultlab-ai-service/runbooks`; the management service validates `docId`, reads and writes only inside that directory, parses front matter and `##` sections, calculates content hashes, and joins local index state metadata.
+
+Index task records wrap the existing `RunbookIndexer` without changing its core behavior. Each task records `taskId`, status, timestamps, duration, `forceRebuild`, counts, document lists, and `errorMessage`. The local task store is `faultlab-ai-service/data/runbook_index_tasks.json`, capped to the latest 100 records and ignored by Git.
+
+Current scope remains intentionally small: no MySQL Runbook tables, no async queue, no RabbitMQ indexing task, no permission system, no audit log, and no version approval workflow.
+
+## v0.8 Retrieval Tuning
+
+The v0.8 tuning pass keeps the same retrieval architecture and focuses on Runbook keywords plus query construction. Runbook Markdown now includes more section-level metric names and English aliases for miss cases, while preserving `docId`, `faultType`, and section titles used by strict evaluation refs.
+
+`query_builder.py` now builds query text from stable Evidence Package fields: `faultType`, `faultName`, `reason`, `evidence`, `suggestions`, metrics, and trace summary slow/error span signals. It also performs basic empty-field handling, deduplication, and length control. BM25-like retrieval uses this same query text for term extraction so CLI evaluation, debug, hybrid fallback, and Milvus query construction stay aligned.
+
+This is still BM25-like keyword retrieval, not standard BM25, and the reranker remains lightweight and rule-based rather than a real rerank model.
+
+The next v0.8 tuning step adjusts only explainable scoring rules. `Bm25RunbookRetriever` boosts matched `faultType`, section title terms, front matter keywords, content terms, metric names, and evidence keys, then applies light section length normalization. `LightweightRunbookReranker` keeps RRF output intact and adds small intent-based boosts for root-cause, remediation, metric, troubleshooting, and risk-oriented sections. RRF still owns rank fusion and `docId + section` de-duplication; rerank only reorders fused chunks.
+
 本文档描述 AI FaultLab 当前 v0.5 RAG Demo 的架构。它强调当前已经实现的工程链路、降级策略和评测能力，也明确当前不是生产级知识管理平台。
 
 ## 1. 总体架构

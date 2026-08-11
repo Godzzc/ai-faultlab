@@ -20,6 +20,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Supports Markdown RAG Evaluation Report generation for human review and comparison.
 - Supports a RAG Evaluation Regression Gate for BM25-only CI checks.
 - Supports RAG Retrieval Debug for inspecting query, vector, BM25, fusion, rerank, and final results.
+- Supports Runbook Management Basic and synchronous Index Task records.
 - Calls Alibaba Cloud Bailian through the OpenAI-compatible API.
 - Supports basic `ModelRouter` model selection.
 - Parses and validates LLM JSON output.
@@ -69,13 +70,17 @@ The BM25-like keyword retriever:
 - Parses `docId`, `title`, `faultType`, and `keywords`.
 - Splits content by second-level headings (`##`) into sections.
 - Applies strong filtering by `ruleResult.faultType` or `experiment.scenarioCode`.
-- Extracts keywords from rule reason, rule evidence, metrics, and trace summary.
+- Extracts terms from the shared retrieval query text, including fault type, rule name, rule reason, evidence, suggestions, metrics, and trace summary.
 - Scores title, section, content, and runbook keywords with BM25-like keyword scoring.
 - Returns the top matching chunks.
 
-The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, document length normalization, title/section/keyword boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
+The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, light document length normalization, title/section/keyword/content boosts, exact metric-name and evidence-key boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
 
-The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, operational sections such as troubleshooting and fixes, evidence metrics, metric keywords, and chunks found by both vector and keyword retrieval.
+For v0.8 retrieval tuning, Runbook front matter keywords and section content include more metric field names and English aliases from miss cases. `query_builder.py` also adds stable query fields and lightweight domain hints derived from metrics and evidence, while keeping deduplication and length control. This improves evaluation and debug consistency without introducing standard BM25 or a real rerank model.
+
+The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, metric and evidence keys, chunks found by both vector and keyword retrieval, and section intent signals such as root cause, fix, metrics, troubleshooting, and risk.
+
+The v0.8 scoring/rerank tuning is validated through the expanded retrieval evaluation cases and the BM25 regression gate. It does not change API paths, RRF fusion, regression thresholds, or the evaluation expected references.
 
 This version does not include FAISS, Elasticsearch, LangChain, LangGraph, MCP, Tool Calling, or a dedicated rerank model.
 
@@ -83,7 +88,7 @@ Future upgrades can add:
 
 - standard BM25
 - BGE reranker or Alibaba Cloud Bailian rerank
-- more retrieval evaluation cases
+- more retrieval evaluation cases beyond the current 27-case baseline
 - nDCG
 - faultType grouped metrics
 - retrieval result visualization
@@ -99,6 +104,8 @@ The evaluation dataset is stored at:
 ```text
 evaluation/rag_eval_cases.json
 ```
+
+The dataset currently contains 27 cases, expanded from the original 9-case baseline. Each fault type has at least 8 cases and covers more detailed MQ backlog, thread pool saturation, and idempotency conflict scenarios. Expected references remain strict `docId + section` pairs.
 
 Each case defines a scenario query and expected `docId + section` references. The current metrics are:
 
@@ -157,7 +164,7 @@ When `report=true`, the response includes `markdownReport`. The report contains:
 - Miss Cases
 - Optimization Suggestions
 
-The optimization suggestions are rule-based and do not call an LLM. Current reporting limits: no nDCG and no visualization UI.
+The optimization suggestions are rule-based and do not call an LLM. After the case expansion, metrics may decrease because the evaluation baseline is stricter; treat that as stronger coverage, not an automatic system regression. Use miss cases to guide later Runbook keyword, query construction, BM25-like scoring, and rerank weight tuning. Current reporting limits: no nDCG and no visualization UI.
 
 ## RAG Evaluation Regression Gate
 
@@ -169,7 +176,7 @@ Thresholds:
 evaluation/rag_eval_thresholds.json
 ```
 
-The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. Raise them gradually after adding more evaluation cases and stabilizing retrieval behavior.
+The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. They are not changed by the 27-case dataset expansion; if metrics drop, review miss cases first instead of lowering thresholds.
 
 Run BM25 locally:
 
@@ -231,6 +238,38 @@ CLI:
 ```
 
 Use this to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus. Vector debug depends on Milvus and embedding availability; if unavailable, debug output keeps BM25 results and records the vector failure in `warnings`.
+
+## Runbook Management Basic
+
+Runbooks are still local Markdown files under `runbooks/`, but the AI service exposes basic management APIs:
+
+```text
+GET /ai/runbooks
+GET /ai/runbooks/{docId}
+POST /ai/runbooks
+PUT /ai/runbooks/{docId}
+DELETE /ai/runbooks/{docId}
+```
+
+`docId` must contain only lowercase letters, digits, and hyphens, such as `mq-backlog`. The service only reads and writes files inside the local `runbooks/` directory. Delete removes the Markdown file only; stale Milvus chunks are cleaned by the next index run.
+
+Index task APIs:
+
+```text
+POST /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks
+GET /ai/runbooks/index-tasks/{taskId}
+```
+
+`POST /ai/runbooks/index-tasks` runs indexing synchronously in this first version and records `taskId`, status, timestamps, duration, forceRebuild, counts, document lists, and errorMessage. Records are stored in:
+
+```text
+data/runbook_index_tasks.json
+```
+
+The existing `POST /ai/runbooks/index` is still supported and keeps the old response fields while adding `taskId`. `docIds` on the task request is accepted but reserved for future selective indexing.
+
+Current limits: no MySQL Runbook tables, no async queue, no RabbitMQ indexing task, no permissions, no audit log, and no version approval workflow.
 
 ## RAG v0.5 Documentation
 

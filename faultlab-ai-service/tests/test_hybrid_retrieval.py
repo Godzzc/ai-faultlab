@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from app import workflow
-from app.retrieval.bm25_runbook_retriever import Bm25RunbookRetriever
+from app.retrieval.bm25_runbook_retriever import Bm25RunbookRetriever, QuerySignals
 from app.retrieval.fusion import reciprocal_rank_fusion
 from app.retrieval.hybrid_runbook_retriever import HybridRunbookRetriever
 from app.retrieval.models import RunbookChunk
@@ -56,14 +56,28 @@ def build_request(fault_type="MQ_BACKLOG", metric_name="publishCount", evidence=
     })
 
 
-def chunk(doc_id="mq-backlog", section="Core Metrics", fault_type="MQ_BACKLOG", score=1.0, source="milvus", metadata=None):
+def chunk(
+    doc_id="mq-backlog",
+    section="Core Metrics",
+    fault_type="MQ_BACKLOG",
+    score=1.0,
+    source="milvus",
+    metadata=None,
+    content=None,
+    keywords=None,
+):
     return RunbookChunk(
         docId=doc_id,
         title=f"{doc_id} runbook",
         faultType=fault_type,
         section=section,
-        content="publishCount consumeCount avgConsumeMs activeThreadCount queueSize hashMismatchCount",
-        keywords=["publishCount", "consumeCount", "activeThreadCount", "hashMismatchCount"],
+        content=content or "publishCount consumeCount avgConsumeMs activeThreadCount queueSize hashMismatchCount",
+        keywords=keywords if keywords is not None else [
+            "publishCount",
+            "consumeCount",
+            "activeThreadCount",
+            "hashMismatchCount",
+        ],
         score=score,
         source=source,
         metadata=metadata or {},
@@ -137,6 +151,85 @@ def test_bm25_runbook_retriever_does_not_return_unmatched_fault_type():
     assert all(item.docId != "mq-backlog" for item in chunks)
 
 
+def test_bm25_scoring_boosts_fault_type_match():
+    retriever = Bm25RunbookRetriever(RUNBOOK_DIR)
+    signals = QuerySignals(terms=["publishcount"], metric_names=set(), evidence_keys=set(), section_intents={})
+    matching = chunk(fault_type="MQ_BACKLOG", content="publishCount", score=0)
+    mismatched = chunk(fault_type="THREAD_POOL_SATURATION", content="publishCount", score=0)
+    document_frequency = {"publishcount": 2}
+
+    matching_score = retriever._with_bm25_like_score(
+        matching, ["publishcount"], signals, document_frequency, 2, 1, "MQ_BACKLOG"
+    ).score
+    mismatched_score = retriever._with_bm25_like_score(
+        mismatched, ["publishcount"], signals, document_frequency, 2, 1, "MQ_BACKLOG"
+    ).score
+
+    assert matching_score > mismatched_score
+
+
+def test_bm25_section_title_hit_can_lift_ranking(monkeypatch):
+    retriever = Bm25RunbookRetriever(RUNBOOK_DIR)
+    request = build_request("MQ_BACKLOG", "publishCount", ["publishCount=10"])
+    title_hit = chunk(section="publishCount", content="generic", keywords=[], source="local_markdown")
+    content_hit = chunk(section="Other", content="publishCount", keywords=[], source="local_markdown")
+    monkeypatch.setattr(retriever, "_load_chunks", lambda: [content_hit, title_hit])
+
+    results = retriever.retrieve(request, workflow.build_trace_summary(request), top_k=2)
+
+    assert results[0].section == "publishCount"
+
+
+def test_bm25_keyword_hit_can_lift_ranking(monkeypatch):
+    retriever = Bm25RunbookRetriever(RUNBOOK_DIR)
+    request = build_request("MQ_BACKLOG", "publishCount", ["publishCount=10"])
+    keyword_hit = chunk(section="Keyword", content="generic", keywords=["publishCount"], source="local_markdown")
+    content_hit = chunk(section="Content", content="publishCount", keywords=[], source="local_markdown")
+    monkeypatch.setattr(retriever, "_load_chunks", lambda: [content_hit, keyword_hit])
+
+    results = retriever.retrieve(request, workflow.build_trace_summary(request), top_k=2)
+
+    assert results[0].section == "Keyword"
+
+
+def test_bm25_metric_name_exact_hit_can_lift_ranking(monkeypatch):
+    retriever = Bm25RunbookRetriever(RUNBOOK_DIR)
+    request = build_request("THREAD_POOL_SATURATION", "activeThreadCount", ["activeThreadCount=16"])
+    metric_hit = chunk(
+        doc_id="thread-pool-saturation",
+        section="Metric",
+        fault_type="THREAD_POOL_SATURATION",
+        content="activeThreadCount",
+        keywords=[],
+        source="local_markdown",
+    )
+    generic = chunk(
+        doc_id="thread-pool-saturation",
+        section="Generic",
+        fault_type="THREAD_POOL_SATURATION",
+        content="executor saturation",
+        keywords=[],
+        source="local_markdown",
+    )
+    monkeypatch.setattr(retriever, "_load_chunks", lambda: [generic, metric_hit])
+
+    results = retriever.retrieve(request, workflow.build_trace_summary(request), top_k=2)
+
+    assert results[0].section == "Metric"
+
+
+def test_bm25_length_normalization_prevents_long_section_from_always_winning(monkeypatch):
+    retriever = Bm25RunbookRetriever(RUNBOOK_DIR)
+    request = build_request("MQ_BACKLOG", "publishCount", ["publishCount=10"])
+    long_chunk = chunk(section="Long", content=" ".join(["publishCount"] * 200), keywords=[], source="local_markdown")
+    short_keyword_chunk = chunk(section="Short", content="publishCount", keywords=["publishCount"], source="local_markdown")
+    monkeypatch.setattr(retriever, "_load_chunks", lambda: [long_chunk, short_keyword_chunk])
+
+    results = retriever.retrieve(request, workflow.build_trace_summary(request), top_k=2)
+
+    assert results[0].section == "Short"
+
+
 def test_rrf_fuses_vector_and_bm25_results():
     fused = reciprocal_rank_fusion([
         [chunk(section="Core Metrics", source="milvus")],
@@ -208,6 +301,39 @@ def test_lightweight_reranker_boosts_dual_source_chunk():
     reranked = LightweightRunbookReranker().rerank([single, dual], request, {}, top_k=2)
 
     assert reranked[0].section == "A"
+
+
+def test_lightweight_reranker_boosts_root_cause_section_for_reason_query():
+    request = build_request("MQ_BACKLOG", "avgConsumeMs", ["avgConsumeMs=1500"])
+    request.rule_result.reason = "root cause is slow consumer logic"
+    cause = chunk(section="常见原因", score=1.0)
+    metrics = chunk(section="核心指标", score=1.0)
+
+    reranked = LightweightRunbookReranker().rerank([metrics, cause], request, {}, top_k=2)
+
+    assert reranked[0].section == "常见原因"
+
+
+def test_lightweight_reranker_boosts_fix_section_for_suggestion_query():
+    request = build_request("MQ_BACKLOG", "backlogCount", ["backlogCount=10"])
+    request.rule_result.suggestions = ["increase consumer concurrency"]
+    fix = chunk(section="修复建议", score=1.0)
+    cause = chunk(section="常见原因", score=1.0)
+
+    reranked = LightweightRunbookReranker().rerank([cause, fix], request, {}, top_k=2)
+
+    assert reranked[0].section == "修复建议"
+
+
+def test_lightweight_reranker_boosts_core_metrics_section_for_metric_query():
+    request = build_request("THREAD_POOL_SATURATION", "rejectedTaskCount", ["rejectedTaskCount=2"])
+    request.rule_result.reason = "metric evidence shows rejection"
+    metrics = chunk(section="核心指标", fault_type="THREAD_POOL_SATURATION", score=1.0)
+    cause = chunk(section="常见原因", fault_type="THREAD_POOL_SATURATION", score=1.0)
+
+    reranked = LightweightRunbookReranker().rerank([cause, metrics], request, {}, top_k=2)
+
+    assert reranked[0].section == "核心指标"
 
 
 def test_hybrid_runbook_retriever_calls_vector_and_bm25():

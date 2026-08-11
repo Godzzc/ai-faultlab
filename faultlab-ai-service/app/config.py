@@ -14,7 +14,7 @@ class Settings(BaseModel):
     llm_fast_model: str = "qwen3.7-plus-2026-05-26"
     llm_reasoning_model: str = "qwen3.7-plus"
     llm_long_context_model: str = "qwen3.7-max"
-    embedding_model: str = "text-embedding-v4"
+    embedding_model: str = "qwen3.7-text-embedding"
     embedding_dimension: int = 1024
     embedding_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     embedding_timeout_seconds: int = 60

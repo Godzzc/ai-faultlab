@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+from collections import Counter
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -9,6 +10,7 @@ from app.evaluation.models import RetrievalEvalCase, RetrievalEvalSummary
 from app.evaluation.report_generator import RetrievalEvaluationReportGenerator
 from app.evaluation.retrieval_evaluator import RetrievalEvaluator
 from app.main import app
+from app.retrieval.bm25_runbook_retriever import Bm25RunbookRetriever
 from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever
 from app.retrieval.models import RunbookChunk
 
@@ -98,8 +100,28 @@ def summary(name="bm25", hit=True, recall=1.0, reciprocal_rank=1.0, case_id="mq_
 def test_can_load_rag_eval_cases_json():
     cases = RetrievalEvaluator(CASES_PATH).load_cases()
 
-    assert len(cases) >= 9
+    assert len(cases) >= 25
     assert cases[0].case_id
+
+
+def test_eval_case_required_fields_and_unique_case_ids():
+    cases = RetrievalEvaluator(CASES_PATH).load_cases()
+    case_ids = [case.case_id for case in cases]
+
+    assert len(case_ids) == len(set(case_ids))
+    for case in cases:
+        assert case.case_id
+        assert case.scenario_code
+        assert case.expected
+
+
+def test_eval_case_fault_type_coverage_has_at_least_8_cases_each():
+    cases = RetrievalEvaluator(CASES_PATH).load_cases()
+    counts = Counter(case.scenario_code for case in cases)
+
+    assert counts["MQ_BACKLOG"] >= 8
+    assert counts["THREAD_POOL_SATURATION"] >= 8
+    assert counts["IDEMPOTENCY_CONFLICT"] >= 8
 
 
 def test_eval_case_expected_doc_id_and_section_are_not_empty():
@@ -188,6 +210,15 @@ def test_evaluation_runner_can_evaluate_mock_retriever(tmp_path):
     assert summary.hit_at_k == 1.0
     assert summary.recall_at_k == 1.0
     assert summary.mrr == 1.0
+
+
+def test_bm25_evaluation_runs_with_real_runbooks():
+    summary = RetrievalEvaluator(CASES_PATH).evaluate("bm25", Bm25RunbookRetriever(RUNBOOK_DIR), top_k=3)
+
+    assert summary.case_count >= 25
+    assert 0.0 <= summary.hit_at_k <= 1.0
+    assert 0.0 <= summary.recall_at_k <= 1.0
+    assert 0.0 <= summary.mrr <= 1.0
 
 
 def test_report_generator_returns_markdown_string():
