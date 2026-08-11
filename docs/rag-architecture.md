@@ -16,6 +16,20 @@ The v0.8 tuning pass keeps the same retrieval architecture and focuses on Runboo
 
 This is still BM25-like keyword retrieval, not standard BM25, and the reranker remains lightweight and rule-based rather than a real rerank model.
 
+## v0.9 Cache Runbooks
+
+v0.9.0 adds three cache failure Runbooks under `faultlab-ai-service/runbooks`:
+
+- `cache-penetration.md` for `CACHE_PENETRATION`
+- `cache-breakdown.md` for `CACHE_BREAKDOWN`
+- `cache-avalanche.md` for `CACHE_AVALANCHE`
+
+Each cache Runbook uses the same six sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. Front matter keeps strict `docId`, `faultType`, and keywords that include Java backend metric fields such as `cache.db.query.count`, `cache.rebuild.count`, and `cache.unavailable.count`.
+
+The front matter parser supports both the existing comma-separated `keywords:` format and YAML-style keyword lists. No new dependency is introduced.
+
+The retrieval architecture is unchanged: Evidence Package input is converted into query text, BM25-like retrieval reads local Markdown chunks, Milvus retrieval uses indexed embeddings when available, Hybrid combines both with RRF and lightweight rule-based rerank. BM25-like is still not standard BM25, and lightweight rerank is still not a model-based reranker.
+
 The next v0.8 tuning step adjusts only explainable scoring rules. `Bm25RunbookRetriever` boosts matched `faultType`, section title terms, front matter keywords, content terms, metric names, and evidence keys, then applies light section length normalization. `LightweightRunbookReranker` keeps RRF output intact and adds small intent-based boosts for root-cause, remediation, metric, troubleshooting, and risk-oriented sections. RRF still owns rank fusion and `docId + section` de-duplication; rerank only reorders fused chunks.
 
 本文档描述 AI FaultLab 当前 v0.5 RAG Demo 的架构。它强调当前已经实现的工程链路、降级策略和评测能力，也明确当前不是生产级知识管理平台。

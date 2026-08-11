@@ -10,6 +10,7 @@ import com.faultlab.backend.experiment.entity.FaultExperiment;
 import com.faultlab.backend.experiment.mapper.FaultExperimentMapper;
 import com.faultlab.backend.metric.entity.FaultMetric;
 import com.faultlab.backend.metric.mapper.FaultMetricMapper;
+import com.faultlab.backend.rule.diagnoser.CacheFailureRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.IdempotencyConflictRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.MqBacklogRuleDiagnoser;
 import com.faultlab.backend.rule.diagnoser.RuleDiagnoser;
@@ -103,6 +104,22 @@ class RuleDiagnosisServiceTests {
     }
 
     @Test
+    void shouldDiagnoseCacheScenarios() {
+        RuleDiagnosisService service = service(List.of(new CacheFailureRuleDiagnoser()), objectMapper);
+        when(faultExperimentMapper.selectOne(any(Wrapper.class))).thenReturn(experiment(ScenarioCode.CACHE_PENETRATION));
+        when(faultMetricMapper.selectList(any(Wrapper.class))).thenReturn(cachePenetrationMetrics());
+        when(diagnosisReportMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        RuleDiagnosisResult result = service.diagnose("exp-1");
+
+        ArgumentCaptor<DiagnosisReport> captor = ArgumentCaptor.forClass(DiagnosisReport.class);
+        verify(diagnosisReportMapper).insert(captor.capture());
+        assertThat(result.getMatched()).isTrue();
+        assertThat(result.getFaultType()).isEqualTo(ScenarioCode.CACHE_PENETRATION);
+        assertThat(captor.getValue().getRuleResultJson()).contains("\"faultType\":\"CACHE_PENETRATION\"");
+    }
+
+    @Test
     void shouldUpdateDiagnosisReportWhenExists() {
         RuleDiagnosisService service = service(List.of(new MqBacklogRuleDiagnoser()), objectMapper);
         DiagnosisReport existingReport = new DiagnosisReport();
@@ -186,7 +203,26 @@ class RuleDiagnosisServiceTests {
         );
     }
 
+    private List<FaultMetric> cachePenetrationMetrics() {
+        return List.of(
+                metric("cache.request.count", 100),
+                metric("cache.miss.rate", 0.8),
+                metric("cache.db.query.count", 90),
+                metric("cache.invalid.key.count", 80),
+                metric("cache.bloom.reject.count", 0),
+                metric("cache.null.cache.write.count", 0)
+        );
+    }
+
     private FaultMetric metric(String metricName, long metricValue) {
+        FaultMetric metric = new FaultMetric();
+        metric.setExperimentId("exp-1");
+        metric.setMetricName(metricName);
+        metric.setMetricValue(BigDecimal.valueOf(metricValue));
+        return metric;
+    }
+
+    private FaultMetric metric(String metricName, double metricValue) {
         FaultMetric metric = new FaultMetric();
         metric.setExperimentId("exp-1");
         metric.setMetricName(metricName);

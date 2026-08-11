@@ -411,3 +411,89 @@ docker compose start milvus-standalone
 - MySQL 初始化脚本来自 `faultlab-backend/src/main/resources/db/schema.sql`。
 - 修改 schema 后，如果已有 MySQL volume，需要执行 `docker compose down -v` 后重新启动才会重建表结构。
 - Python AI Service 的模型、超时和路由配置目前在 `faultlab-ai-service/app/config.py` 中维护。
+
+## Cache Failure Scenario Local Checks
+
+The v0.9.0 cache drills run through the same Java backend API:
+
+```text
+POST http://localhost:8080/api/experiments/start
+```
+
+Cache penetration:
+
+```json
+{
+  "scenarioCode": "CACHE_PENETRATION",
+  "params": {
+    "requestCount": 100,
+    "invalidKeyRatio": 0.8,
+    "enableNullCache": false,
+    "enableBloomFilter": false
+  }
+}
+```
+
+Cache breakdown:
+
+```json
+{
+  "scenarioCode": "CACHE_BREAKDOWN",
+  "params": {
+    "requestCount": 100,
+    "hotKey": "hot:item:1",
+    "concurrency": 20,
+    "enableMutex": false,
+    "enableLogicalExpire": false
+  }
+}
+```
+
+Cache avalanche:
+
+```json
+{
+  "scenarioCode": "CACHE_AVALANCHE",
+  "params": {
+    "keyCount": 50,
+    "requestCount": 200,
+    "sameTtl": true,
+    "enableTtlJitter": false,
+    "simulateRedisDown": false,
+    "enableFallback": false
+  }
+}
+```
+
+After starting an experiment, use the existing endpoints to inspect output:
+
+```text
+GET  /api/experiments/{experimentId}/metrics
+GET  /api/traces/{traceId}
+POST /api/diagnosis/{experimentId}/rule
+POST /api/diagnosis/{experimentId}/ai/generate
+```
+
+The scenarios use deterministic in-process simulation for Redis/DB/cache fallback behavior. They do not require new infrastructure beyond the normal local stack and do not call `flushAll`.
+
+## Cache Runbook Evaluation Local Checks
+
+The Python AI service includes v0.9.0 cache Runbooks and retrieval evaluation cases:
+
+- `CACHE_PENETRATION`
+- `CACHE_BREAKDOWN`
+- `CACHE_AVALANCHE`
+
+The evaluation dataset now contains 42 cases, expanded from 27. The new cache cases still use strict `docId + section` expected references.
+
+Run local checks:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3 --report
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
+```
+
+BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache Runbooks have not been indexed into Milvus, Milvus-only cache results can be empty while BM25 still works.

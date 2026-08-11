@@ -433,3 +433,64 @@ The existing `POST /ai/runbooks/index` remains compatible and now also returns `
 ## License
 
 MIT
+
+## v0.9.0 Cache Failure Scenarios
+
+The Java backend supports three cache failure drill scenario codes through the existing `POST /api/experiments/start` flow:
+
+- `CACHE_PENETRATION`: nonexistent keys miss Redis and DB, increasing DB query volume.
+- `CACHE_BREAKDOWN`: a hot key expires and concurrent requests repeatedly rebuild cache from DB.
+- `CACHE_AVALANCHE`: many keys expire together, or Redis is simulated as unavailable, pushing traffic to DB or fallback.
+
+Example requests:
+
+```json
+{
+  "scenarioCode": "CACHE_PENETRATION",
+  "params": {
+    "requestCount": 100,
+    "invalidKeyRatio": 0.8,
+    "enableNullCache": false,
+    "enableBloomFilter": false
+  }
+}
+```
+
+```json
+{
+  "scenarioCode": "CACHE_BREAKDOWN",
+  "params": {
+    "requestCount": 100,
+    "hotKey": "hot:item:1",
+    "concurrency": 20,
+    "enableMutex": false,
+    "enableLogicalExpire": false
+  }
+}
+```
+
+```json
+{
+  "scenarioCode": "CACHE_AVALANCHE",
+  "params": {
+    "keyCount": 50,
+    "requestCount": 200,
+    "sameTtl": true,
+    "enableTtlJitter": false,
+    "simulateRedisDown": false,
+    "enableFallback": false
+  }
+}
+```
+
+These scenarios generate FaultMetric records, Trace spans, rule diagnosis results, and EvidencePackage input for the existing AI diagnosis chain. They simulate cache behavior internally and use the `faultlab:` key prefix; they do not flush Redis or add dependencies.
+
+## v0.9.0 Cache Runbooks and RAG Evaluation
+
+The Python AI service now includes cache failure Runbooks for:
+
+- `CACHE_PENETRATION`
+- `CACHE_BREAKDOWN`
+- `CACHE_AVALANCHE`
+
+The RAG retrieval evaluation dataset expands from 27 to 42 cases, adding 5 strict `docId + section` cases for each cache fault type. Evaluation still measures retrieval only; it does not call the LLM, Java backend, or frontend. BM25-like retrieval remains a lightweight dependency-free scorer, not a standard search-engine BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus and embedding/index availability.

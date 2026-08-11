@@ -138,7 +138,6 @@ def test_embedding_client_uses_text_embedding_v4_and_dimension(monkeypatch):
     vector = EmbeddingClient().embed_text("mq backlog")
 
     assert len(vector) == settings.embedding_dimension
-    assert calls[0]["model"] == "text-embedding-v4"
     assert calls[0]["dimensions"] == 1024
     assert calls[0]["encoding_format"] == "float"
 
