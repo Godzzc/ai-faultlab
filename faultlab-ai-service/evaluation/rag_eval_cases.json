@@ -1218,5 +1218,670 @@
         "section": "常见原因"
       }
     ]
+  },
+  {
+    "caseId": "cache_penetration_invalid_key",
+    "scenarioCode": "CACHE_PENETRATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_PENETRATION",
+        "faultName": "缓存穿透",
+        "reason": "大量 invalid key 查询不存在数据，Redis cache miss 后 DB query 也为空，cache.invalid.key.count 和 cache.db.query.count 同时升高。",
+        "evidence": [
+          "cache.request.count=100",
+          "cache.miss.rate=0.86",
+          "cache.db.query.count=86",
+          "cache.invalid.key.count=80"
+        ],
+        "suggestions": [
+          "validate request params",
+          "reject illegal key pattern",
+          "rate limit invalid key"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.request.count",
+          "metricValue": "100",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.invalid.key.count",
+          "metricValue": "80",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.db.query.count",
+          "metricValue": "86",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-penetration",
+        "section": "现象"
+      },
+      {
+        "docId": "cache-penetration",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_penetration_null_cache",
+    "scenarioCode": "CACHE_PENETRATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_PENETRATION",
+        "faultName": "缓存穿透",
+        "reason": "不存在数据没有写入 null cache，同一个 empty result 每次都 cache miss 并访问 DB，需要短 TTL 空值缓存治理。",
+        "evidence": [
+          "cache.null.cache.write.count=0",
+          "cache.invalid.key.count=72",
+          "cache.db.query.count=92",
+          "cache.avg.db.query.ms=20"
+        ],
+        "suggestions": [
+          "write null cache for empty result",
+          "keep null cache TTL short",
+          "delete null value when real data is created"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.null.cache.write.count",
+          "metricValue": "0",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.miss.count",
+          "metricValue": "92",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-penetration",
+        "section": "修复建议"
+      },
+      {
+        "docId": "cache-penetration",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_penetration_bloom_filter",
+    "scenarioCode": "CACHE_PENETRATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_PENETRATION",
+        "faultName": "缓存穿透",
+        "reason": "enableBloomFilter 后 cache.bloom.reject.count 增加，说明 bloom filter / cuckoo filter 在 Redis 和 DB 前拦截非法 key。",
+        "evidence": [
+          "cache.bloom.reject.count=76",
+          "cache.invalid.key.count=0",
+          "cache.db.query.count=18",
+          "filter legal key set updated"
+        ],
+        "suggestions": [
+          "use bloom filter",
+          "use cuckoo filter when deletion is needed",
+          "maintain filter incremental updates"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.bloom.reject.count",
+          "metricValue": "76",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.db.query.count",
+          "metricValue": "18",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-penetration",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "cache-penetration",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_penetration_db_pressure",
+    "scenarioCode": "CACHE_PENETRATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_PENETRATION",
+        "faultName": "缓存穿透",
+        "reason": "cache.db.query.count 接近 requestCount，cache.db.query.rate 高，DB query count 被 cache miss 放大形成数据库压力。",
+        "evidence": [
+          "cache.request.count=120",
+          "cache.miss.count=116",
+          "cache.miss.rate=0.9667",
+          "cache.db.query.count=116",
+          "cache.db.query.rate=0.9667"
+        ],
+        "suggestions": [
+          "check DB connection pool",
+          "protect DB with rate limit",
+          "add null cache and filter"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.db.query.rate",
+          "metricValue": "0.9667",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.avg.db.query.ms",
+          "metricValue": "35",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-penetration",
+        "section": "核心指标"
+      },
+      {
+        "docId": "cache-penetration",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_penetration_risk_control",
+    "scenarioCode": "CACHE_PENETRATION",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_PENETRATION",
+        "faultName": "缓存穿透",
+        "reason": "热点非法 key 黑名单缺失，null cache TTL 过长可能影响新数据，bloom filter 也存在 false positive 和更新滞后风险。",
+        "evidence": [
+          "hotInvalidKey=item:invalid:42",
+          "cache.null.cache.write.count=60",
+          "cache.bloom.reject.count=0",
+          "filter false positive risk"
+        ],
+        "suggestions": [
+          "add invalid key blacklist",
+          "short null cache TTL",
+          "monitor bloom filter false positive"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.invalid.key.count",
+          "metricValue": "60",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.null.cache.write.count",
+          "metricValue": "60",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-penetration",
+        "section": "风险提示"
+      },
+      {
+        "docId": "cache-penetration",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_breakdown_hot_key_expired",
+    "scenarioCode": "CACHE_BREAKDOWN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_BREAKDOWN",
+        "faultName": "缓存击穿",
+        "reason": "hot key expired 后 cache.lookup.hot-key 大量 miss，cache.hot.key.request.count 和 cache.hot.key.miss.count 同时升高。",
+        "evidence": [
+          "hotKey=hot:item:1",
+          "cache.hot.key.request.count=100",
+          "cache.hot.key.miss.count=100",
+          "cache.miss.rate=1.0"
+        ],
+        "suggestions": [
+          "prewarm hot key",
+          "avoid normal TTL for hot key"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.hot.key.request.count",
+          "metricValue": "100",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.hot.key.miss.count",
+          "metricValue": "100",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-breakdown",
+        "section": "现象"
+      },
+      {
+        "docId": "cache-breakdown",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_breakdown_rebuild_storm",
+    "scenarioCode": "CACHE_BREAKDOWN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_BREAKDOWN",
+        "faultName": "缓存击穿",
+        "reason": "未启用 mutex 时多个请求同时 db.query.hot-key 并 cache rebuild，cache.rebuild.count 和 cache.concurrent.rebuild.count 过高，形成 rebuild storm。",
+        "evidence": [
+          "cache.db.query.count=100",
+          "cache.rebuild.count=100",
+          "cache.concurrent.rebuild.count=20",
+          "rebuild storm"
+        ],
+        "suggestions": [
+          "use mutex lock",
+          "use singleflight",
+          "reduce duplicate cache rebuild"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.rebuild.count",
+          "metricValue": "100",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.concurrent.rebuild.count",
+          "metricValue": "20",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-breakdown",
+        "section": "常见原因"
+      },
+      {
+        "docId": "cache-breakdown",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_breakdown_mutex_lock",
+    "scenarioCode": "CACHE_BREAKDOWN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_BREAKDOWN",
+        "faultName": "缓存击穿",
+        "reason": "enableMutex 后 lock.acquire 只允许一个请求重建缓存，cache.lock.acquire.count 有值，cache.lock.fail.count 表示其他请求未进入 DB。",
+        "evidence": [
+          "cache.lock.acquire.count=1",
+          "cache.lock.fail.count=99",
+          "cache.rebuild.count=1",
+          "cache.db.query.count=1"
+        ],
+        "suggestions": [
+          "keep mutex lock TTL short",
+          "set rebuild timeout",
+          "prevent dead lock"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.lock.acquire.count",
+          "metricValue": "1",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.lock.fail.count",
+          "metricValue": "99",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-breakdown",
+        "section": "修复建议"
+      },
+      {
+        "docId": "cache-breakdown",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_breakdown_logical_expire",
+    "scenarioCode": "CACHE_BREAKDOWN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_BREAKDOWN",
+        "faultName": "缓存击穿",
+        "reason": "logical expire 策略允许请求返回 stale value，后台异步刷新 hot key，避免全部请求阻塞在 DB query。",
+        "evidence": [
+          "enableLogicalExpire=true",
+          "stale value returned",
+          "cache.rebuild.duration.ms=100",
+          "cache.hot.key.miss.count=0"
+        ],
+        "suggestions": [
+          "use logical expire",
+          "async refresh hot key",
+          "accept short stale value window"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.rebuild.duration.ms",
+          "metricValue": "100",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.rebuild.count",
+          "metricValue": "1",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-breakdown",
+        "section": "修复建议"
+      },
+      {
+        "docId": "cache-breakdown",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_breakdown_singleflight",
+    "scenarioCode": "CACHE_BREAKDOWN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_BREAKDOWN",
+        "faultName": "缓存击穿",
+        "reason": "singleflight 可以合并同进程 hot key 请求，减少 cache rebuild count，但多实例仍需要分布式锁或二级缓存。",
+        "evidence": [
+          "singleflight enabled",
+          "cache.rebuild.count=1",
+          "cache.concurrent.rebuild.count=0",
+          "multi instance risk"
+        ],
+        "suggestions": [
+          "singleflight for same process",
+          "distributed mutex for multi instance",
+          "local cache fallback"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.concurrent.rebuild.count",
+          "metricValue": "0",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.rebuild.count",
+          "metricValue": "1",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-breakdown",
+        "section": "修复建议"
+      },
+      {
+        "docId": "cache-breakdown",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_avalanche_same_ttl",
+    "scenarioCode": "CACHE_AVALANCHE",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_AVALANCHE",
+        "faultName": "缓存雪崩",
+        "reason": "大量 key 使用 same TTL，在同一时间 many keys expired，cache.expired.key.count 接近 cache.key.count，cache.miss.rate 升高。",
+        "evidence": [
+          "cache.key.count=50",
+          "cache.expired.key.count=50",
+          "cache.miss.rate=1.0",
+          "same ttl"
+        ],
+        "suggestions": [
+          "add ttl jitter",
+          "avoid same TTL",
+          "cache warm-up"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.key.count",
+          "metricValue": "50",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.expired.key.count",
+          "metricValue": "50",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-avalanche",
+        "section": "现象"
+      },
+      {
+        "docId": "cache-avalanche",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_avalanche_redis_unavailable",
+    "scenarioCode": "CACHE_AVALANCHE",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_AVALANCHE",
+        "faultName": "缓存雪崩",
+        "reason": "Redis unavailable / redis down 导致 cache.unavailable.count 升高，请求无法访问缓存并出现 request error count。",
+        "evidence": [
+          "simulateRedisDown=true",
+          "cache.unavailable.count=200",
+          "cache.request.error.count=160",
+          "redis timeout"
+        ],
+        "suggestions": [
+          "check Redis HA",
+          "enable circuit breaker",
+          "use fallback"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.unavailable.count",
+          "metricValue": "200",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.request.error.count",
+          "metricValue": "160",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-avalanche",
+        "section": "常见原因"
+      },
+      {
+        "docId": "cache-avalanche",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_avalanche_ttl_jitter",
+    "scenarioCode": "CACHE_AVALANCHE",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_AVALANCHE",
+        "faultName": "缓存雪崩",
+        "reason": "启用 TTL jitter 后只有部分 key expired，过期时间随机化能降低 same TTL 同时失效概率。",
+        "evidence": [
+          "enableTtlJitter=true",
+          "cache.key.count=50",
+          "cache.expired.key.count=10",
+          "cache.miss.rate=0.2"
+        ],
+        "suggestions": [
+          "keep TTL jitter",
+          "spread expiration time",
+          "combine cache warm-up"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.expired.key.count",
+          "metricValue": "10",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.miss.rate",
+          "metricValue": "0.2",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-avalanche",
+        "section": "修复建议"
+      },
+      {
+        "docId": "cache-avalanche",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_avalanche_fallback",
+    "scenarioCode": "CACHE_AVALANCHE",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_AVALANCHE",
+        "faultName": "缓存雪崩",
+        "reason": "enableFallback 后 fallback.local-cache 命中，cache.fallback.count 增加并减少 cache.request.error.count。",
+        "evidence": [
+          "cache.unavailable.count=200",
+          "cache.fallback.count=180",
+          "cache.request.error.count=20",
+          "local cache fallback"
+        ],
+        "suggestions": [
+          "use multi-level cache",
+          "serve fallback value",
+          "define stale data tolerance"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.fallback.count",
+          "metricValue": "180",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.request.error.count",
+          "metricValue": "20",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-avalanche",
+        "section": "修复建议"
+      },
+      {
+        "docId": "cache-avalanche",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "cache_avalanche_db_spike",
+    "scenarioCode": "CACHE_AVALANCHE",
+    "query": {
+      "ruleResult": {
+        "faultType": "CACHE_AVALANCHE",
+        "faultName": "缓存雪崩",
+        "reason": "大面积 cache miss 后 cache.db.query.count 和 cache.db.slow.query.count 同时升高，形成 DB query spike 和慢查询。",
+        "evidence": [
+          "cache.request.count=200",
+          "cache.miss.count=180",
+          "cache.db.query.count=180",
+          "cache.db.slow.query.count=120"
+        ],
+        "suggestions": [
+          "rate limit DB fallback traffic",
+          "enable circuit breaker",
+          "prewarm cache before release"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "cache.db.query.count",
+          "metricValue": "180",
+          "component": "Cache"
+        },
+        {
+          "metricName": "cache.db.slow.query.count",
+          "metricValue": "120",
+          "component": "Cache"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "cache-avalanche",
+        "section": "核心指标"
+      },
+      {
+        "docId": "cache-avalanche",
+        "section": "排查步骤"
+      }
+    ]
   }
 ]

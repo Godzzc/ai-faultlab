@@ -475,3 +475,25 @@ POST /api/diagnosis/{experimentId}/ai/generate
 ```
 
 The scenarios use deterministic in-process simulation for Redis/DB/cache fallback behavior. They do not require new infrastructure beyond the normal local stack and do not call `flushAll`.
+
+## Cache Runbook Evaluation Local Checks
+
+The Python AI service includes v0.9.0 cache Runbooks and retrieval evaluation cases:
+
+- `CACHE_PENETRATION`
+- `CACHE_BREAKDOWN`
+- `CACHE_AVALANCHE`
+
+The evaluation dataset now contains 42 cases, expanded from 27. The new cache cases still use strict `docId + section` expected references.
+
+Run local checks:
+
+```powershell
+cd faultlab-ai-service
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3 --report
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
+.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
+```
+
+BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache Runbooks have not been indexed into Milvus, Milvus-only cache results can be empty while BM25 still works.

@@ -17,6 +17,24 @@ from app.retrieval.models import RunbookChunk
 client = TestClient(app)
 CASES_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "rag_eval_cases.json"
 RUNBOOK_DIR = Path(__file__).resolve().parents[1] / "runbooks"
+FIXED_CACHE_SECTIONS = {"现象", "核心指标", "常见原因", "排查步骤", "修复建议", "风险提示"}
+NEW_CACHE_CASE_IDS = {
+    "cache_penetration_invalid_key",
+    "cache_penetration_null_cache",
+    "cache_penetration_bloom_filter",
+    "cache_penetration_db_pressure",
+    "cache_penetration_risk_control",
+    "cache_breakdown_hot_key_expired",
+    "cache_breakdown_rebuild_storm",
+    "cache_breakdown_mutex_lock",
+    "cache_breakdown_logical_expire",
+    "cache_breakdown_singleflight",
+    "cache_avalanche_same_ttl",
+    "cache_avalanche_redis_unavailable",
+    "cache_avalanche_ttl_jitter",
+    "cache_avalanche_fallback",
+    "cache_avalanche_db_spike",
+}
 
 
 class MockRetriever:
@@ -100,7 +118,7 @@ def summary(name="bm25", hit=True, recall=1.0, reciprocal_rank=1.0, case_id="mq_
 def test_can_load_rag_eval_cases_json():
     cases = RetrievalEvaluator(CASES_PATH).load_cases()
 
-    assert len(cases) >= 25
+    assert len(cases) >= 42
     assert cases[0].case_id
 
 
@@ -122,6 +140,22 @@ def test_eval_case_fault_type_coverage_has_at_least_8_cases_each():
     assert counts["MQ_BACKLOG"] >= 8
     assert counts["THREAD_POOL_SATURATION"] >= 8
     assert counts["IDEMPOTENCY_CONFLICT"] >= 8
+
+
+def test_cache_eval_case_fault_type_coverage_has_at_least_5_cases_each():
+    cases = RetrievalEvaluator(CASES_PATH).load_cases()
+    counts = Counter(case.scenario_code for case in cases)
+
+    assert counts["CACHE_PENETRATION"] >= 5
+    assert counts["CACHE_BREAKDOWN"] >= 5
+    assert counts["CACHE_AVALANCHE"] >= 5
+
+
+def test_new_cache_eval_cases_exist():
+    cases = RetrievalEvaluator(CASES_PATH).load_cases()
+    case_ids = {case.case_id for case in cases}
+
+    assert NEW_CACHE_CASE_IDS <= case_ids
 
 
 def test_eval_case_expected_doc_id_and_section_are_not_empty():
@@ -215,10 +249,29 @@ def test_evaluation_runner_can_evaluate_mock_retriever(tmp_path):
 def test_bm25_evaluation_runs_with_real_runbooks():
     summary = RetrievalEvaluator(CASES_PATH).evaluate("bm25", Bm25RunbookRetriever(RUNBOOK_DIR), top_k=3)
 
-    assert summary.case_count >= 25
+    assert summary.case_count >= 42
     assert 0.0 <= summary.hit_at_k <= 1.0
     assert 0.0 <= summary.recall_at_k <= 1.0
     assert 0.0 <= summary.mrr <= 1.0
+
+
+def test_cache_runbooks_can_be_loaded_with_expected_metadata_and_sections():
+    chunks = KeywordRunbookRetriever(RUNBOOK_DIR)._load_chunks()
+    by_doc_id = {}
+    for chunk_item in chunks:
+        by_doc_id.setdefault(chunk_item.docId, []).append(chunk_item)
+
+    expected = {
+        "cache-penetration": "CACHE_PENETRATION",
+        "cache-breakdown": "CACHE_BREAKDOWN",
+        "cache-avalanche": "CACHE_AVALANCHE",
+    }
+    for doc_id, fault_type in expected.items():
+        assert doc_id in by_doc_id
+        doc_chunks = by_doc_id[doc_id]
+        assert {chunk_item.section for chunk_item in doc_chunks} >= FIXED_CACHE_SECTIONS
+        assert {chunk_item.faultType for chunk_item in doc_chunks} == {fault_type}
+        assert all(chunk_item.keywords for chunk_item in doc_chunks)
 
 
 def test_report_generator_returns_markdown_string():
@@ -262,6 +315,9 @@ def test_report_generator_infers_fault_type_from_case_id():
     assert generator.infer_fault_type("mq_backlog_core_metrics") == "MQ_BACKLOG"
     assert generator.infer_fault_type("thread_pool_rejection") == "THREAD_POOL_SATURATION"
     assert generator.infer_fault_type("idempotency_setnx_duplicate") == "IDEMPOTENCY_CONFLICT"
+    assert generator.infer_fault_type("cache_penetration_invalid_key") == "CACHE_PENETRATION"
+    assert generator.infer_fault_type("cache_breakdown_hot_key_expired") == "CACHE_BREAKDOWN"
+    assert generator.infer_fault_type("cache_avalanche_same_ttl") == "CACHE_AVALANCHE"
     assert generator.infer_fault_type("unknown_case") == "UNKNOWN"
 
 
