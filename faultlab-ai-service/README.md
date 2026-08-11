@@ -88,12 +88,24 @@ Future upgrades can add:
 
 - standard BM25
 - BGE reranker or Alibaba Cloud Bailian rerank
-- more retrieval evaluation cases beyond the current 27-case baseline
+- more retrieval evaluation cases beyond the current 42-case baseline
 - nDCG
 - faultType grouped metrics
 - retrieval result visualization
 - stricter CI regression thresholds
 - Runbook management UI
+
+## v0.9.0 Cache Runbooks
+
+The service now includes three cache failure Runbooks:
+
+- `runbooks/cache-penetration.md` for `CACHE_PENETRATION`
+- `runbooks/cache-breakdown.md` for `CACHE_BREAKDOWN`
+- `runbooks/cache-avalanche.md` for `CACHE_AVALANCHE`
+
+Each Runbook uses the same sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. The content includes Java backend metric fields, English aliases, common engineering terms, troubleshooting steps, and remediation guidance.
+
+The front matter parser accepts YAML-style keyword lists for these Runbooks without adding PyYAML or any other dependency.
 
 ## RAG Retrieval Evaluation
 
@@ -105,7 +117,7 @@ The evaluation dataset is stored at:
 evaluation/rag_eval_cases.json
 ```
 
-The dataset currently contains 27 cases, expanded from the original 9-case baseline. Each fault type has at least 8 cases and covers more detailed MQ backlog, thread pool saturation, and idempotency conflict scenarios. Expected references remain strict `docId + section` pairs.
+The dataset currently contains 42 cases, expanded from the previous 27-case baseline. The cache expansion adds 5 cases each for `CACHE_PENETRATION`, `CACHE_BREAKDOWN`, and `CACHE_AVALANCHE`, while retaining the existing MQ backlog, thread pool saturation, and idempotency conflict cases. Expected references remain strict `docId + section` pairs.
 
 Each case defines a scenario query and expected `docId + section` references. The current metrics are:
 

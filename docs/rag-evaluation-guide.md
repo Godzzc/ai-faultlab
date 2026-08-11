@@ -50,6 +50,20 @@ Query construction now keeps `faultType`, `faultName`, `reason`, `evidence`, `su
 
 This remains BM25-like keyword retrieval, not standard BM25. The reranker remains lightweight and rule-based, not a real rerank model.
 
+## v0.9 Cache Evaluation Cases
+
+The retrieval evaluation dataset now expands from 27 to 42 cases. The added 15 cases cover:
+
+- `CACHE_PENETRATION`: 5 cases for invalid key, null cache, bloom filter, DB pressure, and risk control.
+- `CACHE_BREAKDOWN`: 5 cases for hot key expiry, rebuild storm, mutex lock, logical expire, and singleflight.
+- `CACHE_AVALANCHE`: 5 cases for same TTL, Redis unavailable, TTL jitter, fallback, and DB spike.
+
+Expected references remain strict `docId + section` pairs. The new cache Runbook sections are `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`; every expected section must exist in the Markdown Runbook.
+
+The BM25 regression thresholds are unchanged. If metrics fall after adding cases, first inspect miss cases and tune Runbook wording or keywords. Do not lower `evaluation/rag_eval_thresholds.json` just to pass the gate.
+
+Milvus and Hybrid evaluation still depend on local Milvus, embedding service availability, and whether newly added Runbooks have been indexed. BM25 evaluation does not require Milvus or external API calls.
+
 ## v0.8 Scoring and Rerank Tuning
 
 The v0.8 scoring pass keeps the retrieval stack dependency-free and tunes only the explainable rules. BM25-like scoring now applies explicit boosts for matching `faultType`, section titles, front matter keywords, content terms, metric names, and evidence keys, with a light length normalization so longer sections do not win only because they contain more words.

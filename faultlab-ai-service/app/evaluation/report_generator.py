@@ -11,6 +11,9 @@ FAULT_TYPE_PREFIXES = {
     "mq_": "MQ_BACKLOG",
     "thread_pool_": "THREAD_POOL_SATURATION",
     "idempotency_": "IDEMPOTENCY_CONFLICT",
+    "cache_penetration_": "CACHE_PENETRATION",
+    "cache_breakdown_": "CACHE_BREAKDOWN",
+    "cache_avalanche_": "CACHE_AVALANCHE",
 }
 
 

@@ -84,19 +84,33 @@ class KeywordRunbookRetriever(BaseRunbookRetriever):
             if section_content.strip()
         ]
 
-    def _parse_front_matter(self, raw: str) -> tuple[dict[str, str], str]:
+    def _parse_front_matter(self, raw: str) -> tuple[dict[str, str | list[str]], str]:
         match = FRONT_MATTER_PATTERN.match(raw)
         if not match:
             logger.warning("Runbook front matter missing")
             return {}, raw
 
-        metadata: dict[str, str] = {}
+        metadata: dict[str, str | list[str]] = {}
+        current_list_key = ""
         for line in match.group(1).splitlines():
+            stripped = line.strip()
+            if current_list_key and stripped.startswith("- "):
+                list_value = metadata.setdefault(current_list_key, [])
+                if isinstance(list_value, list):
+                    list_value.append(stripped[2:].strip())
+                continue
             if ":" not in line:
                 logger.warning("Invalid front matter line ignored: %s", line)
                 continue
             key, value = line.split(":", 1)
-            metadata[key.strip()] = value.strip()
+            current_list_key = ""
+            key = key.strip()
+            value = value.strip()
+            if not value:
+                metadata[key] = []
+                current_list_key = key
+                continue
+            metadata[key] = value
         return metadata, raw[match.end():]
 
     def _split_sections(self, body: str) -> list[tuple[str, str]]:
@@ -161,7 +175,9 @@ class KeywordRunbookRetriever(BaseRunbookRetriever):
             return tokens
         return self._tokens_from_value(str(value))
 
-    def _split_keywords(self, value: str) -> list[str]:
+    def _split_keywords(self, value: str | list[str]) -> list[str]:
+        if isinstance(value, list):
+            return [item.strip() for item in value if item and item.strip()]
         return [item.strip() for item in value.split(",") if item.strip()]
 
     def _with_score(self, chunk: RunbookChunk, query_keywords: set[str]) -> RunbookChunk:
