@@ -1883,5 +1883,685 @@
         "section": "排查步骤"
       }
     ]
+  },
+  {
+    "caseId": "db_slow_query_full_scan",
+    "scenarioCode": "DB_SLOW_QUERY",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_SLOW_QUERY",
+        "faultName": "慢 SQL / 全表扫描",
+        "reason": "queryMode=FULL_SCAN with full table scan: db.full.scan.count and db.slow.query.count rise, db.avg.query.ms is high.",
+        "evidence": [
+          "requestCount=100",
+          "queryMode=FULL_SCAN",
+          "db.slow.query.count=100",
+          "db.full.scan.count=100",
+          "db.avg.query.ms=80"
+        ],
+        "suggestions": [
+          "check execution plan",
+          "avoid full scan",
+          "add proper index"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.slow.query.count",
+          "metricValue": "100",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.full.scan.count",
+          "metricValue": "100",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.avg.query.ms",
+          "metricValue": "80",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-slow-query",
+        "section": "现象"
+      },
+      {
+        "docId": "db-slow-query",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "db_slow_query_index_miss",
+    "scenarioCode": "DB_SLOW_QUERY",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_SLOW_QUERY",
+        "faultName": "慢 SQL / 全表扫描",
+        "reason": "The SQL has index miss from implicit conversion and function on indexed column; execution plan key is null and scanned rows increase.",
+        "evidence": [
+          "index miss",
+          "implicit conversion",
+          "function on indexed column",
+          "db.index.hit.count=0",
+          "db.scanned.rows=76000"
+        ],
+        "suggestions": [
+          "avoid index invalidation",
+          "rewrite where condition",
+          "check covering index"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.index.hit.count",
+          "metricValue": "0",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.scanned.rows",
+          "metricValue": "76000",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-slow-query",
+        "section": "常见原因"
+      },
+      {
+        "docId": "db-slow-query",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "db_slow_query_scanned_rows_high",
+    "scenarioCode": "DB_SLOW_QUERY",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_SLOW_QUERY",
+        "faultName": "慢 SQL / 全表扫描",
+        "reason": "db.scanned.rows is close to db.table.size, scannedRows is high, and API latency is dragged by the large scan.",
+        "evidence": [
+          "db.scanned.rows=95000",
+          "db.table.size=100000",
+          "api.avg.latency.ms=95",
+          "db.max.query.ms=110"
+        ],
+        "suggestions": [
+          "reduce scanned rows",
+          "add selective index",
+          "avoid select *"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.scanned.rows",
+          "metricValue": "95000",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.table.size",
+          "metricValue": "100000",
+          "component": "Database"
+        },
+        {
+          "metricName": "api.avg.latency.ms",
+          "metricValue": "95",
+          "component": "API"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-slow-query",
+        "section": "核心指标"
+      },
+      {
+        "docId": "db-slow-query",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "db_slow_query_execution_plan",
+    "scenarioCode": "DB_SLOW_QUERY",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_SLOW_QUERY",
+        "faultName": "慢 SQL / 全表扫描",
+        "reason": "Use EXPLAIN to analyze execution plan fields type, key, rows, and Extra for full scan or filesort.",
+        "evidence": [
+          "explain type=ALL",
+          "key=null",
+          "rows=80000",
+          "Extra=Using where"
+        ],
+        "suggestions": [
+          "analyze execution plan",
+          "verify index choice",
+          "compare estimated rows"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.full.scan.count",
+          "metricValue": "80",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.max.query.ms",
+          "metricValue": "120",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-slow-query",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "db_slow_query_optimization_suggestion",
+    "scenarioCode": "DB_SLOW_QUERY",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_SLOW_QUERY",
+        "faultName": "慢 SQL / 全表扫描",
+        "reason": "Slow query remediation needs covering index, seek pagination, avoid select *, and avoiding deep pagination that amplifies scanned rows.",
+        "evidence": [
+          "deep pagination offset=500000",
+          "select *",
+          "db.avg.query.ms=150",
+          "db.slow.query.rate=0.9"
+        ],
+        "suggestions": [
+          "use covering index",
+          "use seek pagination",
+          "avoid select *",
+          "read write split"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.slow.query.rate",
+          "metricValue": "0.9",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.avg.query.ms",
+          "metricValue": "150",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-slow-query",
+        "section": "修复建议"
+      },
+      {
+        "docId": "db-slow-query",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "db_lock_contention_long_transaction",
+    "scenarioCode": "DB_LOCK_CONTENTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_LOCK_CONTENTION",
+        "faultName": "数据库锁竞争 / 长事务阻塞",
+        "reason": "A long transaction holds row lock too long; db.long.transaction.count and db.lock.wait.count rise and other requests are transaction blocking.",
+        "evidence": [
+          "targetRowId=order:1",
+          "db.long.transaction.count=5",
+          "db.lock.wait.count=49",
+          "db.avg.lock.wait.ms=100"
+        ],
+        "suggestions": [
+          "shorten transaction",
+          "avoid remote call in transaction",
+          "reduce transaction scope"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.long.transaction.count",
+          "metricValue": "5",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.lock.wait.count",
+          "metricValue": "49",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-lock-contention",
+        "section": "现象"
+      },
+      {
+        "docId": "db-lock-contention",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "db_lock_contention_hot_row",
+    "scenarioCode": "DB_LOCK_CONTENTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_LOCK_CONTENTION",
+        "faultName": "数据库锁竞争 / 长事务阻塞",
+        "reason": "Concurrent requests update the same hot row order:1; row lock contention makes lock wait rate high.",
+        "evidence": [
+          "hot row=order:1",
+          "concurrency=10",
+          "db.lock.wait.rate=0.98",
+          "db.transaction.active.count=10"
+        ],
+        "suggestions": [
+          "split hot row",
+          "reduce lock granularity",
+          "queue writes by key"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.lock.wait.rate",
+          "metricValue": "0.98",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.transaction.active.count",
+          "metricValue": "10",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-lock-contention",
+        "section": "常见原因"
+      },
+      {
+        "docId": "db-lock-contention",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "db_lock_contention_lock_wait_timeout",
+    "scenarioCode": "DB_LOCK_CONTENTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_LOCK_CONTENTION",
+        "faultName": "数据库锁竞争 / 长事务阻塞",
+        "reason": "lock wait exceeds lockWaitTimeoutMs; db.update.timeout.count and api.timeout.count increase.",
+        "evidence": [
+          "lockWaitTimeoutMs=100",
+          "db.update.timeout.count=45",
+          "api.timeout.count=45",
+          "db.max.lock.wait.ms=100"
+        ],
+        "suggestions": [
+          "set lock wait timeout",
+          "fast fail and retry",
+          "inspect blocking transaction"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.update.timeout.count",
+          "metricValue": "45",
+          "component": "Database"
+        },
+        {
+          "metricName": "api.timeout.count",
+          "metricValue": "45",
+          "component": "API"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-lock-contention",
+        "section": "核心指标"
+      },
+      {
+        "docId": "db-lock-contention",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "db_lock_contention_transaction_scope",
+    "scenarioCode": "DB_LOCK_CONTENTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_LOCK_CONTENTION",
+        "faultName": "数据库锁竞争 / 长事务阻塞",
+        "reason": "The transaction includes remote call and MQ send; transaction scope is too large and row lock is held too long.",
+        "evidence": [
+          "remote call in transaction",
+          "mq send in transaction",
+          "db.avg.lock.wait.ms=180",
+          "db.long.transaction.count=8"
+        ],
+        "suggestions": [
+          "move remote call out of transaction",
+          "shorten transaction scope",
+          "use outbox pattern"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.avg.lock.wait.ms",
+          "metricValue": "180",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.long.transaction.count",
+          "metricValue": "8",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-lock-contention",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "db-lock-contention",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "db_lock_contention_optimistic_lock",
+    "scenarioCode": "DB_LOCK_CONTENTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_LOCK_CONTENTION",
+        "faultName": "数据库锁竞争 / 长事务阻塞",
+        "reason": "Hot row updates can use optimistic lock / version column to convert long lock wait into controlled conflict retry.",
+        "evidence": [
+          "optimistic lock missing",
+          "version column missing",
+          "db.lock.wait.count=60",
+          "retry needed"
+        ],
+        "suggestions": [
+          "use optimistic lock",
+          "limit retry count",
+          "backoff on conflict"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.lock.wait.count",
+          "metricValue": "60",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.update.success.count",
+          "metricValue": "10",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-lock-contention",
+        "section": "修复建议"
+      },
+      {
+        "docId": "db-lock-contention",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "db_connection_pool_active_full",
+    "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_CONNECTION_POOL_EXHAUSTION",
+        "faultName": "数据库连接池耗尽",
+        "reason": "HikariCP active connection is at maxPoolSize; db.pool.active.count=10 and db.pool.idle.count=0 indicate pool saturation.",
+        "evidence": [
+          "maxPoolSize=10",
+          "db.pool.active.count=10",
+          "db.pool.idle.count=0",
+          "active connection full"
+        ],
+        "suggestions": [
+          "check HikariCP metrics",
+          "find long connection holder",
+          "protect API"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.pool.max.size",
+          "metricValue": "10",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.pool.active.count",
+          "metricValue": "10",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.pool.idle.count",
+          "metricValue": "0",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "现象"
+      },
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "db_connection_pool_acquire_timeout",
+    "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_CONNECTION_POOL_EXHAUSTION",
+        "faultName": "数据库连接池耗尽",
+        "reason": "New requests acquire connection longer than connectionAcquireTimeoutMs; db.connection.acquire.timeout.count and api.error.count rise.",
+        "evidence": [
+          "connectionAcquireTimeoutMs=50",
+          "db.connection.acquire.timeout.count=90",
+          "db.connection.acquire.avg.ms=50",
+          "api.error.count=90"
+        ],
+        "suggestions": [
+          "set connection timeout",
+          "fast fail",
+          "isolate online and batch pools"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.connection.acquire.timeout.count",
+          "metricValue": "90",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.connection.acquire.avg.ms",
+          "metricValue": "50",
+          "component": "Database"
+        },
+        {
+          "metricName": "api.error.count",
+          "metricValue": "90",
+          "component": "API"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "核心指标"
+      },
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "db_connection_pool_slow_query_holding",
+    "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_CONNECTION_POOL_EXHAUSTION",
+        "faultName": "数据库连接池耗尽",
+        "reason": "slow query holds connection; db.connection.hold.avg.ms is high because slow query and long transaction hold connections too long.",
+        "evidence": [
+          "queryDelayMs=200",
+          "db.connection.hold.avg.ms=200",
+          "db.query.count=10",
+          "slow query holds connection"
+        ],
+        "suggestions": [
+          "optimize slow SQL",
+          "shorten transaction",
+          "reduce connection hold time"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.connection.hold.avg.ms",
+          "metricValue": "200",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.query.count",
+          "metricValue": "10",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "常见原因"
+      },
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "db_connection_pool_leak_risk",
+    "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_CONNECTION_POOL_EXHAUSTION",
+        "faultName": "数据库连接池耗尽",
+        "reason": "connection leak risk: active connection does not drop, idle connection is 0, check HikariCP leakDetectionThreshold and stack trace.",
+        "evidence": [
+          "connection leak risk",
+          "db.pool.active.count=10",
+          "db.pool.idle.count=0",
+          "active not released"
+        ],
+        "suggestions": [
+          "enable leak detection",
+          "check stack trace",
+          "ensure connection closed"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.pool.active.count",
+          "metricValue": "10",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.pool.idle.count",
+          "metricValue": "0",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "db_connection_pool_sizing_suggestion",
+    "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
+    "query": {
+      "ruleResult": {
+        "faultType": "DB_CONNECTION_POOL_EXHAUSTION",
+        "faultName": "数据库连接池耗尽",
+        "reason": "pool sizing must consider maxPoolSize, query latency, and DB capacity; do not blindly enlarge pool.",
+        "evidence": [
+          "maxPoolSize=5",
+          "concurrency=30",
+          "db.connection.acquire.timeout.rate=0.8",
+          "database capacity limited"
+        ],
+        "suggestions": [
+          "right size maxPoolSize",
+          "configure connectionTimeout",
+          "do not blindly enlarge pool",
+          "read write isolation"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "db.pool.max.size",
+          "metricValue": "5",
+          "component": "Database"
+        },
+        {
+          "metricName": "db.connection.acquire.timeout.rate",
+          "metricValue": "0.8",
+          "component": "Database"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "修复建议"
+      },
+      {
+        "docId": "db-connection-pool-exhaustion",
+        "section": "风险提示"
+      }
+    ]
   }
 ]

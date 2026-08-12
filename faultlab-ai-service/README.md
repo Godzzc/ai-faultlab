@@ -88,7 +88,7 @@ Future upgrades can add:
 
 - standard BM25
 - BGE reranker or Alibaba Cloud Bailian rerank
-- more retrieval evaluation cases beyond the current 42-case baseline
+- more retrieval evaluation cases beyond the current 57-case baseline
 - nDCG
 - faultType grouped metrics
 - retrieval result visualization
@@ -107,6 +107,16 @@ Each Runbook uses the same sections: `现象`, `核心指标`, `常见原因`, `
 
 The front matter parser accepts YAML-style keyword lists for these Runbooks without adding PyYAML or any other dependency.
 
+## v0.10.0 Database Runbooks
+
+The service now includes three database bottleneck Runbooks:
+
+- `runbooks/db-slow-query.md` for `DB_SLOW_QUERY`
+- `runbooks/db-lock-contention.md` for `DB_LOCK_CONTENTION`
+- `runbooks/db-connection-pool-exhaustion.md` for `DB_CONNECTION_POOL_EXHAUSTION`
+
+Each Runbook uses the same sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. The content includes Java backend metric fields, English aliases, common engineering terms, troubleshooting steps, and remediation guidance for slow SQL, lock contention, and connection pool exhaustion.
+
 ## RAG Retrieval Evaluation
 
 RAG Retrieval Evaluation measures only the Runbook retrieval stage. It does not call the LLM, diagnosis workflow, Java backend, or frontend.
@@ -117,7 +127,7 @@ The evaluation dataset is stored at:
 evaluation/rag_eval_cases.json
 ```
 
-The dataset currently contains 42 cases, expanded from the previous 27-case baseline. The cache expansion adds 5 cases each for `CACHE_PENETRATION`, `CACHE_BREAKDOWN`, and `CACHE_AVALANCHE`, while retaining the existing MQ backlog, thread pool saturation, and idempotency conflict cases. Expected references remain strict `docId + section` pairs.
+The dataset currently contains 57 cases, expanded from the previous 42-case baseline. The database expansion adds 5 cases each for `DB_SLOW_QUERY`, `DB_LOCK_CONTENTION`, and `DB_CONNECTION_POOL_EXHAUSTION`, while retaining the existing MQ backlog, thread pool saturation, idempotency conflict, and cache cases. Expected references remain strict `docId + section` pairs.
 
 Each case defines a scenario query and expected `docId + section` references. The current metrics are:
 
@@ -188,7 +198,7 @@ Thresholds:
 evaluation/rag_eval_thresholds.json
 ```
 
-The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. They are not changed by the 27-case dataset expansion; if metrics drop, review miss cases first instead of lowering thresholds.
+The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. They are not changed by the 57-case dataset expansion; if metrics drop, review miss cases first instead of lowering thresholds.
 
 Run BM25 locally:
 

@@ -18,6 +18,7 @@ client = TestClient(app)
 CASES_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "rag_eval_cases.json"
 RUNBOOK_DIR = Path(__file__).resolve().parents[1] / "runbooks"
 FIXED_CACHE_SECTIONS = {"现象", "核心指标", "常见原因", "排查步骤", "修复建议", "风险提示"}
+FIXED_DATABASE_SECTIONS = {"现象", "核心指标", "常见原因", "排查步骤", "修复建议", "风险提示"}
 NEW_CACHE_CASE_IDS = {
     "cache_penetration_invalid_key",
     "cache_penetration_null_cache",
@@ -34,6 +35,23 @@ NEW_CACHE_CASE_IDS = {
     "cache_avalanche_ttl_jitter",
     "cache_avalanche_fallback",
     "cache_avalanche_db_spike",
+}
+NEW_DATABASE_CASE_IDS = {
+    "db_slow_query_full_scan",
+    "db_slow_query_index_miss",
+    "db_slow_query_scanned_rows_high",
+    "db_slow_query_execution_plan",
+    "db_slow_query_optimization_suggestion",
+    "db_lock_contention_long_transaction",
+    "db_lock_contention_hot_row",
+    "db_lock_contention_lock_wait_timeout",
+    "db_lock_contention_transaction_scope",
+    "db_lock_contention_optimistic_lock",
+    "db_connection_pool_active_full",
+    "db_connection_pool_acquire_timeout",
+    "db_connection_pool_slow_query_holding",
+    "db_connection_pool_leak_risk",
+    "db_connection_pool_sizing_suggestion",
 }
 
 
@@ -118,7 +136,7 @@ def summary(name="bm25", hit=True, recall=1.0, reciprocal_rank=1.0, case_id="mq_
 def test_can_load_rag_eval_cases_json():
     cases = RetrievalEvaluator(CASES_PATH).load_cases()
 
-    assert len(cases) >= 42
+    assert len(cases) >= 57
     assert cases[0].case_id
 
 
@@ -151,11 +169,27 @@ def test_cache_eval_case_fault_type_coverage_has_at_least_5_cases_each():
     assert counts["CACHE_AVALANCHE"] >= 5
 
 
+def test_database_eval_case_fault_type_coverage_has_at_least_5_cases_each():
+    cases = RetrievalEvaluator(CASES_PATH).load_cases()
+    counts = Counter(case.scenario_code for case in cases)
+
+    assert counts["DB_SLOW_QUERY"] >= 5
+    assert counts["DB_LOCK_CONTENTION"] >= 5
+    assert counts["DB_CONNECTION_POOL_EXHAUSTION"] >= 5
+
+
 def test_new_cache_eval_cases_exist():
     cases = RetrievalEvaluator(CASES_PATH).load_cases()
     case_ids = {case.case_id for case in cases}
 
     assert NEW_CACHE_CASE_IDS <= case_ids
+
+
+def test_new_database_eval_cases_exist():
+    cases = RetrievalEvaluator(CASES_PATH).load_cases()
+    case_ids = {case.case_id for case in cases}
+
+    assert NEW_DATABASE_CASE_IDS <= case_ids
 
 
 def test_eval_case_expected_doc_id_and_section_are_not_empty():
@@ -249,7 +283,7 @@ def test_evaluation_runner_can_evaluate_mock_retriever(tmp_path):
 def test_bm25_evaluation_runs_with_real_runbooks():
     summary = RetrievalEvaluator(CASES_PATH).evaluate("bm25", Bm25RunbookRetriever(RUNBOOK_DIR), top_k=3)
 
-    assert summary.case_count >= 42
+    assert summary.case_count >= 57
     assert 0.0 <= summary.hit_at_k <= 1.0
     assert 0.0 <= summary.recall_at_k <= 1.0
     assert 0.0 <= summary.mrr <= 1.0
@@ -270,6 +304,25 @@ def test_cache_runbooks_can_be_loaded_with_expected_metadata_and_sections():
         assert doc_id in by_doc_id
         doc_chunks = by_doc_id[doc_id]
         assert {chunk_item.section for chunk_item in doc_chunks} >= FIXED_CACHE_SECTIONS
+        assert {chunk_item.faultType for chunk_item in doc_chunks} == {fault_type}
+        assert all(chunk_item.keywords for chunk_item in doc_chunks)
+
+
+def test_database_runbooks_can_be_loaded_with_expected_metadata_and_sections():
+    chunks = KeywordRunbookRetriever(RUNBOOK_DIR)._load_chunks()
+    by_doc_id = {}
+    for chunk_item in chunks:
+        by_doc_id.setdefault(chunk_item.docId, []).append(chunk_item)
+
+    expected = {
+        "db-slow-query": "DB_SLOW_QUERY",
+        "db-lock-contention": "DB_LOCK_CONTENTION",
+        "db-connection-pool-exhaustion": "DB_CONNECTION_POOL_EXHAUSTION",
+    }
+    for doc_id, fault_type in expected.items():
+        assert doc_id in by_doc_id
+        doc_chunks = by_doc_id[doc_id]
+        assert {chunk_item.section for chunk_item in doc_chunks} >= FIXED_DATABASE_SECTIONS
         assert {chunk_item.faultType for chunk_item in doc_chunks} == {fault_type}
         assert all(chunk_item.keywords for chunk_item in doc_chunks)
 
@@ -318,6 +371,9 @@ def test_report_generator_infers_fault_type_from_case_id():
     assert generator.infer_fault_type("cache_penetration_invalid_key") == "CACHE_PENETRATION"
     assert generator.infer_fault_type("cache_breakdown_hot_key_expired") == "CACHE_BREAKDOWN"
     assert generator.infer_fault_type("cache_avalanche_same_ttl") == "CACHE_AVALANCHE"
+    assert generator.infer_fault_type("db_slow_query_full_scan") == "DB_SLOW_QUERY"
+    assert generator.infer_fault_type("db_lock_contention_hot_row") == "DB_LOCK_CONTENTION"
+    assert generator.infer_fault_type("db_connection_pool_active_full") == "DB_CONNECTION_POOL_EXHAUSTION"
     assert generator.infer_fault_type("unknown_case") == "UNKNOWN"
 
 

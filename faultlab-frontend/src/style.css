@@ -424,14 +424,14 @@ li + li {
   overflow-x: auto;
 }
 
-.cache-metric-grid {
+.highlight-metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
 
-.cache-metric-card {
+.highlight-metric-card {
   min-height: 84px;
   padding: 12px;
   border: 1px solid #bae6fd;
@@ -439,8 +439,8 @@ li + li {
   background: #f0f9ff;
 }
 
-.cache-metric-card span,
-.cache-metric-card small {
+.highlight-metric-card span,
+.highlight-metric-card small {
   display: block;
   overflow-wrap: anywhere;
   color: #0369a1;
@@ -448,7 +448,7 @@ li + li {
   font-size: 11px;
 }
 
-.cache-metric-card strong {
+.highlight-metric-card strong {
   display: block;
   margin: 8px 0 5px;
   overflow-wrap: anywhere;
@@ -779,7 +779,7 @@ td {
     grid-template-columns: 1fr 1fr;
   }
 
-  .cache-metric-grid {
+  .highlight-metric-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -811,7 +811,7 @@ td {
     grid-template-columns: 1fr;
   }
 
-  .cache-metric-grid {
+  .highlight-metric-grid {
     grid-template-columns: 1fr;
   }
 }

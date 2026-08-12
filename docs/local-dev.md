@@ -476,15 +476,76 @@ POST /api/diagnosis/{experimentId}/ai/generate
 
 The scenarios use deterministic in-process simulation for Redis/DB/cache fallback behavior. They do not require new infrastructure beyond the normal local stack and do not call `flushAll`.
 
-## Cache Runbook Evaluation Local Checks
+## Database Bottleneck Scenario Local Checks
 
-The Python AI service includes v0.9.0 cache Runbooks and retrieval evaluation cases:
+The v0.10.0 database bottleneck drills also run through the same Java backend API:
+
+```text
+POST http://localhost:8080/api/experiments/start
+```
+
+Slow SQL / full scan:
+
+```json
+{
+  "scenarioCode": "DB_SLOW_QUERY",
+  "params": {
+    "requestCount": 100,
+    "queryMode": "FULL_SCAN",
+    "tableSize": 100000,
+    "scannedRows": 80000,
+    "dbDelayMs": 80,
+    "enableIndexOptimization": false
+  }
+}
+```
+
+Lock contention:
+
+```json
+{
+  "scenarioCode": "DB_LOCK_CONTENTION",
+  "params": {
+    "requestCount": 50,
+    "concurrency": 10,
+    "targetRowId": "order:1",
+    "lockHoldMs": 200,
+    "lockWaitTimeoutMs": 100,
+    "enableShortTransaction": false
+  }
+}
+```
+
+Connection pool exhaustion:
+
+```json
+{
+  "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 30,
+    "maxPoolSize": 10,
+    "queryDelayMs": 200,
+    "connectionAcquireTimeoutMs": 50,
+    "enableFastRelease": false
+  }
+}
+```
+
+These scenarios are deterministic local simulations. They do not create large MySQL tables, open real long transactions, modify HikariCP settings, exhaust real database connections, or run load tests.
+
+## Cache and Database Runbook Evaluation Local Checks
+
+The Python AI service includes v0.9.0 cache Runbooks and v0.10.0 database Runbooks with retrieval evaluation cases:
 
 - `CACHE_PENETRATION`
 - `CACHE_BREAKDOWN`
 - `CACHE_AVALANCHE`
+- `DB_SLOW_QUERY`
+- `DB_LOCK_CONTENTION`
+- `DB_CONNECTION_POOL_EXHAUSTION`
 
-The evaluation dataset now contains 42 cases, expanded from 27. The new cache cases still use strict `docId + section` expected references.
+The evaluation dataset now contains 57 cases, expanded from 42 by adding 15 database cases. The cache and database cases still use strict `docId + section` expected references.
 
 Run local checks:
 
@@ -496,4 +557,4 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
 ```
 
-BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache Runbooks have not been indexed into Milvus, Milvus-only cache results can be empty while BM25 still works.
+BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache or database Runbooks have not been indexed into Milvus, Milvus-only results for those fault types can be empty while BM25 still works.
