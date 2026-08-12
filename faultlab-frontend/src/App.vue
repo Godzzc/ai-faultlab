@@ -112,9 +112,86 @@ const scenarios = [
       { key: 'enableFallback', label: '启用本地兜底', type: 'boolean' },
     ],
   },
+  {
+    code: 'DB_SLOW_QUERY',
+    name: '慢 SQL / 全表扫描',
+    alias: 'Slow Query / Full Scan',
+    description:
+      '模拟 SQL 未命中索引、扫描行数过多或全表扫描，导致 DB 查询耗时升高和接口响应变慢。可通过索引优化、执行计划分析、覆盖索引和分页优化治理。',
+    defaults: {
+      requestCount: 100,
+      queryMode: 'FULL_SCAN',
+      tableSize: 100000,
+      scannedRows: 80000,
+      dbDelayMs: 80,
+      enableIndexOptimization: false,
+    },
+    fields: [
+      { key: 'requestCount', label: '请求总数', type: 'number', min: 1 },
+      {
+        key: 'queryMode',
+        label: '查询模式',
+        type: 'select',
+        options: [
+          { value: 'FULL_SCAN', label: 'FULL_SCAN' },
+          { value: 'INDEXED', label: 'INDEXED' },
+        ],
+      },
+      { key: 'tableSize', label: '表数据量', type: 'number', min: 1 },
+      { key: 'scannedRows', label: '扫描行数', type: 'number', min: 0 },
+      { key: 'dbDelayMs', label: 'DB 延迟 ms', type: 'number', min: 0 },
+      { key: 'enableIndexOptimization', label: '启用索引优化', type: 'boolean' },
+    ],
+  },
+  {
+    code: 'DB_LOCK_CONTENTION',
+    name: '数据库锁竞争',
+    alias: 'Lock Contention',
+    description:
+      '模拟长事务或热点行更新导致锁等待，其他请求更新同一资源时阻塞，接口延迟升高或超时。可通过缩短事务、避免事务内远程调用、降低锁粒度和乐观锁治理。',
+    defaults: {
+      requestCount: 50,
+      concurrency: 10,
+      targetRowId: 'order:1',
+      lockHoldMs: 200,
+      lockWaitTimeoutMs: 100,
+      enableShortTransaction: false,
+    },
+    fields: [
+      { key: 'requestCount', label: '请求总数', type: 'number', min: 1 },
+      { key: 'concurrency', label: '并发数', type: 'number', min: 1 },
+      { key: 'targetRowId', label: '热点行 ID', type: 'text' },
+      { key: 'lockHoldMs', label: '持锁时间 ms', type: 'number', min: 0 },
+      { key: 'lockWaitTimeoutMs', label: '锁等待超时 ms', type: 'number', min: 0 },
+      { key: 'enableShortTransaction', label: '启用短事务', type: 'boolean' },
+    ],
+  },
+  {
+    code: 'DB_CONNECTION_POOL_EXHAUSTION',
+    name: '数据库连接池耗尽',
+    alias: 'Connection Pool Exhaustion',
+    description:
+      '模拟慢查询或长事务占用数据库连接过久，连接池 active 接近 max，新请求获取连接等待或超时。可通过优化慢 SQL、缩短事务、连接池合理配置、超时控制和连接泄漏排查治理。',
+    defaults: {
+      requestCount: 100,
+      concurrency: 30,
+      maxPoolSize: 10,
+      queryDelayMs: 200,
+      connectionAcquireTimeoutMs: 50,
+      enableFastRelease: false,
+    },
+    fields: [
+      { key: 'requestCount', label: '请求总数', type: 'number', min: 1 },
+      { key: 'concurrency', label: '并发数', type: 'number', min: 1 },
+      { key: 'maxPoolSize', label: '最大连接数', type: 'number', min: 1 },
+      { key: 'queryDelayMs', label: '查询耗时 ms', type: 'number', min: 0 },
+      { key: 'connectionAcquireTimeoutMs', label: '获取连接超时 ms', type: 'number', min: 0 },
+      { key: 'enableFastRelease', label: '启用快速释放', type: 'boolean' },
+    ],
+  },
 ]
 
-const cacheMetricNames = {
+const highlightedMetricNames = {
   CACHE_PENETRATION: [
     'cache.request.count',
     'cache.miss.rate',
@@ -139,6 +216,33 @@ const cacheMetricNames = {
     'cache.db.query.count',
     'cache.fallback.count',
     'cache.request.error.count',
+  ],
+  DB_SLOW_QUERY: [
+    'db.query.count',
+    'db.slow.query.count',
+    'db.slow.query.rate',
+    'db.avg.query.ms',
+    'db.max.query.ms',
+    'db.full.scan.count',
+    'db.scanned.rows',
+  ],
+  DB_LOCK_CONTENTION: [
+    'db.lock.request.count',
+    'db.lock.wait.count',
+    'db.lock.wait.rate',
+    'db.avg.lock.wait.ms',
+    'db.max.lock.wait.ms',
+    'db.update.timeout.count',
+    'db.long.transaction.count',
+  ],
+  DB_CONNECTION_POOL_EXHAUSTION: [
+    'db.pool.max.size',
+    'db.pool.active.count',
+    'db.connection.acquire.timeout.count',
+    'db.connection.acquire.timeout.rate',
+    'db.connection.acquire.avg.ms',
+    'db.connection.hold.avg.ms',
+    'api.error.count',
   ],
 }
 
@@ -268,8 +372,8 @@ const evaluationSummaries = computed(() => {
 
 const activeScenarioCode = computed(() => experiment.value?.scenarioCode || selectedScenarioCode.value)
 
-const cacheMetricHighlights = computed(() => {
-  const names = cacheMetricNames[activeScenarioCode.value]
+const highlightedMetrics = computed(() => {
+  const names = highlightedMetricNames[activeScenarioCode.value]
   if (!names || metrics.value.length === 0) return []
   return names.map((name) => {
     const metric = metrics.value.find((item) => item.metricName === name)
@@ -452,6 +556,7 @@ function normalizedParams() {
     selectedScenario.value.fields.map((field) => {
       const value = params[field.key]
       if (field.type === 'boolean') return [field.key, Boolean(value)]
+      if (field.type === 'select') return [field.key, String(value ?? '')]
       if (field.type === 'text') return [field.key, String(value ?? '').trim()]
       return [field.key, Number(value)]
     }),
@@ -574,7 +679,17 @@ function formatMetadata(metadata) {
             </template>
             <template v-else>
               <span>{{ field.label }}</span>
+              <select v-if="field.type === 'select'" v-model="params[field.key]">
+                <option
+                  v-for="option in field.options"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
               <input
+                v-else
                 v-model="params[field.key]"
                 :type="field.type === 'text' ? 'text' : 'number'"
                 :min="field.min"
@@ -772,11 +887,11 @@ function formatMetadata(metadata) {
             <h2>指标表格</h2>
             <span>{{ metrics.length }} items</span>
           </div>
-          <div v-if="cacheMetricHighlights.length" class="cache-metric-grid">
+          <div v-if="highlightedMetrics.length" class="highlight-metric-grid">
             <article
-              v-for="metric in cacheMetricHighlights"
+              v-for="metric in highlightedMetrics"
               :key="metric.name"
-              class="cache-metric-card"
+              class="highlight-metric-card"
             >
               <span>{{ metric.name }}</span>
               <strong>{{ formatValue(metric.value) }}</strong>
