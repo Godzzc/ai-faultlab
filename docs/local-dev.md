@@ -534,15 +534,18 @@ Connection pool exhaustion:
 
 These scenarios are deterministic local simulations. They do not create large MySQL tables, open real long transactions, modify HikariCP settings, exhaust real database connections, or run load tests.
 
-## Cache Runbook Evaluation Local Checks
+## Cache and Database Runbook Evaluation Local Checks
 
-The Python AI service includes v0.9.0 cache Runbooks and retrieval evaluation cases:
+The Python AI service includes v0.9.0 cache Runbooks and v0.10.0 database Runbooks with retrieval evaluation cases:
 
 - `CACHE_PENETRATION`
 - `CACHE_BREAKDOWN`
 - `CACHE_AVALANCHE`
+- `DB_SLOW_QUERY`
+- `DB_LOCK_CONTENTION`
+- `DB_CONNECTION_POOL_EXHAUSTION`
 
-The evaluation dataset now contains 42 cases, expanded from 27. The new cache cases still use strict `docId + section` expected references.
+The evaluation dataset now contains 57 cases, expanded from 42 by adding 15 database cases. The cache and database cases still use strict `docId + section` expected references.
 
 Run local checks:
 
@@ -554,4 +557,4 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
 ```
 
-BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache Runbooks have not been indexed into Milvus, Milvus-only cache results can be empty while BM25 still works.
+BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache or database Runbooks have not been indexed into Milvus, Milvus-only results for those fault types can be empty while BM25 still works.
