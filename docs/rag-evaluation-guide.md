@@ -52,7 +52,7 @@ This remains BM25-like keyword retrieval, not standard BM25. The reranker remain
 
 ## v0.9 Cache Evaluation Cases
 
-The retrieval evaluation dataset now expands from 27 to 42 cases. The added 15 cases cover:
+The v0.9 cache expansion moved the retrieval evaluation dataset from 27 to 42 cases. The current v0.10 dataset is 57 cases after database bottleneck additions. The 15 cache cases cover:
 
 - `CACHE_PENETRATION`: 5 cases for invalid key, null cache, bloom filter, DB pressure, and risk control.
 - `CACHE_BREAKDOWN`: 5 cases for hot key expiry, rebuild storm, mutex lock, logical expire, and singleflight.
@@ -63,6 +63,20 @@ Expected references remain strict `docId + section` pairs. The new cache Runbook
 The BM25 regression thresholds are unchanged. If metrics fall after adding cases, first inspect miss cases and tune Runbook wording or keywords. Do not lower `evaluation/rag_eval_thresholds.json` just to pass the gate.
 
 Milvus and Hybrid evaluation still depend on local Milvus, embedding service availability, and whether newly added Runbooks have been indexed. BM25 evaluation does not require Milvus or external API calls.
+
+## v0.10 Database Evaluation Cases
+
+The retrieval evaluation dataset now expands from 42 to 57 cases. The added 15 cases cover:
+
+- `DB_SLOW_QUERY`: 5 cases for full scan, index miss, high scanned rows, execution plan checks, and optimization suggestions.
+- `DB_LOCK_CONTENTION`: 5 cases for long transaction, hot row, lock wait timeout, transaction scope, and optimistic lock.
+- `DB_CONNECTION_POOL_EXHAUSTION`: 5 cases for active pool saturation, acquire timeout, slow query connection holding, connection leak risk, and pool sizing suggestions.
+
+Expected references remain strict `docId + section` pairs. The new database Runbook sections are `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`; every expected section must exist in the Markdown Runbook.
+
+The BM25 regression thresholds are unchanged. If metrics fall after adding cases, first inspect miss cases and tune Runbook wording or keywords. Do not lower `evaluation/rag_eval_thresholds.json` just to pass the gate.
+
+BM25-like retrieval is still not standard BM25, and lightweight rerank is still rule-based rather than a real rerank model. Hybrid and Milvus evaluation still require local Milvus, embedding service availability, and a current Runbook vector index.
 
 ## v0.8 Scoring and Rerank Tuning
 
@@ -92,13 +106,19 @@ RAG 链路不能只靠人工观察“看起来像召回了相关内容”。如�
 faultlab-ai-service/evaluation/rag_eval_cases.json
 ```
 
-当前包含 27 个 case，已从早期 9 个 case 扩充为更稳定的 v0.8.0 评测基线，覆盖：
+当前包含 57 个 case，已从早期 9 个 case 扩充为更稳定的评测基线，覆盖：
 
 - `MQ_BACKLOG`
 - `THREAD_POOL_SATURATION`
 - `IDEMPOTENCY_CONFLICT`
+- `CACHE_PENETRATION`
+- `CACHE_BREAKDOWN`
+- `CACHE_AVALANCHE`
+- `DB_SLOW_QUERY`
+- `DB_LOCK_CONTENTION`
+- `DB_CONNECTION_POOL_EXHAUSTION`
 
-每类故障至少 8 个 case，覆盖 MQ 堆积、线程池饱和和幂等冲突的更多细分场景。每个 expected 仍然使用严格的 `docId + section`，并且 section 必须来自已有 Runbook。
+早期三类故障各至少 8 个 case，cache 和 database 扩展场景各 5 个 case。每个 expected 仍然使用严格的 `docId + section`，并且 section 必须来自已有 Runbook。
 
 每个 case 包含：
 
@@ -220,7 +240,7 @@ Markdown report 面向人工阅读、复盘和博客整理。报告包含：
 
 ### 扩充数据集后指标下降是正常现象
 
-评测集从 9 个 case 扩充到 27 个 case 后，BM25-like、Milvus 或 Hybrid 的 Hit@K、Recall@K、MRR 可能下降。这通常说明评测集覆盖了更细的故障表达和更难的 section 匹配，不应直接解释为系统退化。
+评测集从 9 个 case 扩充到 57 个 case 后，BM25-like、Milvus 或 Hybrid 的 Hit@K、Recall@K、MRR 可能下降。这通常说明评测集覆盖了更细的故障表达和更难的 section 匹配，不应直接解释为系统退化。
 
 后续优化应基于 miss case 逐步调整 Runbook keywords、query construction、BM25-like scoring 和 rerank 权重，而不是降低 regression threshold 或放宽 expected 匹配标准。
 
@@ -248,7 +268,7 @@ Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-l
 
 ## 8. 当前限制
 
-- case 数量已经扩充到 27 个，但仍不是生产级大规模评测集。
+- case 数量已经扩充到 57 个，但仍不是生产级大规模评测集。
 - 没有 nDCG。
 - hybrid gate 尚未作为 CI 必过项。
 - Milvus evaluation 依赖 Milvus 和 embedding 可用。

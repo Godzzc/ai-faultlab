@@ -14,6 +14,9 @@ FAULT_TYPE_PREFIXES = {
     "cache_penetration_": "CACHE_PENETRATION",
     "cache_breakdown_": "CACHE_BREAKDOWN",
     "cache_avalanche_": "CACHE_AVALANCHE",
+    "db_slow_query_": "DB_SLOW_QUERY",
+    "db_lock_contention_": "DB_LOCK_CONTENTION",
+    "db_connection_pool_": "DB_CONNECTION_POOL_EXHAUSTION",
 }
 
 
