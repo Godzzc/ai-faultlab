@@ -192,6 +192,9 @@ h3 {
 .scenario-list {
   display: grid;
   gap: 10px;
+  max-height: min(680px, calc(100vh - 150px));
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .scenario-button {
@@ -232,6 +235,7 @@ h3 {
 .scenario-button span {
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .form-grid {
@@ -281,6 +285,7 @@ h3 {
 .form-check-field {
   align-self: end;
   min-height: 38px;
+  line-height: 1.35;
 }
 
 .scenario-note {

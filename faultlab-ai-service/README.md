@@ -88,7 +88,7 @@ Future upgrades can add:
 
 - standard BM25
 - BGE reranker or Alibaba Cloud Bailian rerank
-- more retrieval evaluation cases beyond the current 57-case baseline
+- more retrieval evaluation cases beyond the current 72-case baseline
 - nDCG
 - faultType grouped metrics
 - retrieval result visualization
@@ -117,6 +117,16 @@ The service now includes three database bottleneck Runbooks:
 
 Each Runbook uses the same sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. The content includes Java backend metric fields, English aliases, common engineering terms, troubleshooting steps, and remediation guidance for slow SQL, lock contention, and connection pool exhaustion.
 
+## v0.11.0 Downstream Runbooks
+
+The service now includes three downstream resilience Runbooks:
+
+- `runbooks/downstream-timeout.md` for `DOWNSTREAM_TIMEOUT`
+- `runbooks/retry-storm.md` for `RETRY_STORM`
+- `runbooks/circuit-breaker-open.md` for `CIRCUIT_BREAKER_OPEN`
+
+Each Runbook uses the same sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. The content includes Java backend metric fields, English aliases, common engineering terms, troubleshooting steps, and remediation guidance for downstream timeout, retry storm, and circuit breaker open scenarios.
+
 ## RAG Retrieval Evaluation
 
 RAG Retrieval Evaluation measures only the Runbook retrieval stage. It does not call the LLM, diagnosis workflow, Java backend, or frontend.
@@ -127,7 +137,7 @@ The evaluation dataset is stored at:
 evaluation/rag_eval_cases.json
 ```
 
-The dataset currently contains 57 cases, expanded from the previous 42-case baseline. The database expansion adds 5 cases each for `DB_SLOW_QUERY`, `DB_LOCK_CONTENTION`, and `DB_CONNECTION_POOL_EXHAUSTION`, while retaining the existing MQ backlog, thread pool saturation, idempotency conflict, and cache cases. Expected references remain strict `docId + section` pairs.
+The dataset currently contains 72 cases, expanded from the previous 57-case baseline. The downstream expansion adds 5 cases each for `DOWNSTREAM_TIMEOUT`, `RETRY_STORM`, and `CIRCUIT_BREAKER_OPEN`, while retaining the existing MQ backlog, thread pool saturation, idempotency conflict, cache, and database cases. Expected references remain strict `docId + section` pairs. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
 
 Each case defines a scenario query and expected `docId + section` references. The current metrics are:
 
@@ -198,7 +208,7 @@ Thresholds:
 evaluation/rag_eval_thresholds.json
 ```
 
-The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. They are not changed by the 57-case dataset expansion; if metrics drop, review miss cases first instead of lowering thresholds.
+The current thresholds are the v0.5 baseline. They are intentionally modest and do not represent production targets. They are not changed by the 72-case dataset expansion; if metrics drop, review miss cases first instead of lowering thresholds.
 
 Run BM25 locally:
 

@@ -234,3 +234,106 @@ Metrics:
 Rule diagnosis matches when acquire timeout count, active pool saturation, acquire wait time, or API error count indicates pool exhaustion.
 
 The existing diagnosis endpoints support the database fault types without a contract change. EvidencePackage includes the experiment `scenarioCode`, metrics, trace tree, and `RuleDiagnosisResult` for `DB_SLOW_QUERY`, `DB_LOCK_CONTENTION`, and `DB_CONNECTION_POOL_EXHAUSTION`.
+
+## Downstream Timeout
+
+Scenario code: `DOWNSTREAM_TIMEOUT`
+
+Params:
+
+```json
+{
+  "requestCount": 100,
+  "concurrency": 20,
+  "downstreamDelayMs": 300,
+  "timeoutMs": 100,
+  "timeoutRatio": 0.8,
+  "enableFallback": false,
+  "fallbackDelayMs": 10
+}
+```
+
+Metrics:
+
+- `downstream.request.count`
+- `downstream.timeout.count`
+- `downstream.timeout.rate`
+- `downstream.avg.latency.ms`
+- `downstream.max.latency.ms`
+- `downstream.slow.call.count`
+- `downstream.fallback.count`
+- `api.avg.latency.ms`
+- `api.error.count`
+- `api.success.count`
+
+Rule diagnosis matches when timeout rate, downstream latency, max latency, API errors, or missing fallback indicate downstream timeout risk.
+
+## Retry Storm
+
+Scenario code: `RETRY_STORM`
+
+Params:
+
+```json
+{
+  "requestCount": 100,
+  "concurrency": 20,
+  "failureRatio": 0.7,
+  "maxRetries": 3,
+  "retryBackoffMs": 20,
+  "enableRetryLimit": false,
+  "enableJitter": false
+}
+```
+
+Metrics:
+
+- `downstream.initial.request.count`
+- `downstream.total.call.count`
+- `downstream.retry.count`
+- `downstream.retry.rate`
+- `downstream.retry.exhausted.count`
+- `downstream.failure.count`
+- `downstream.success.count`
+- `downstream.retry.amplification.factor`
+- `api.error.count`
+- `api.avg.latency.ms`
+
+Rule diagnosis matches when retry count, total downstream calls, retry amplification, retry exhaustion, or API errors indicate retry storm risk.
+
+## Circuit Breaker Open
+
+Scenario code: `CIRCUIT_BREAKER_OPEN`
+
+Params:
+
+```json
+{
+  "requestCount": 100,
+  "failureRatio": 0.8,
+  "slowCallRatio": 0.5,
+  "slidingWindowSize": 20,
+  "failureRateThreshold": 0.5,
+  "slowCallThresholdMs": 200,
+  "openDurationMs": 500,
+  "enableFallback": true
+}
+```
+
+Metrics:
+
+- `circuit.request.count`
+- `circuit.failure.count`
+- `circuit.failure.rate`
+- `circuit.slow.call.count`
+- `circuit.slow.call.rate`
+- `circuit.open.count`
+- `circuit.half.open.count`
+- `circuit.rejected.count`
+- `circuit.fallback.count`
+- `downstream.call.skipped.count`
+- `api.error.count`
+
+Rule diagnosis matches when failure rate, slow-call rate, open count, rejected count, or skipped downstream calls indicate an opened circuit breaker.
+
+The existing diagnosis endpoints support the downstream fault types without a contract change. EvidencePackage includes the experiment `scenarioCode`, metrics, trace tree, and `RuleDiagnosisResult` for `DOWNSTREAM_TIMEOUT`, `RETRY_STORM`, and `CIRCUIT_BREAKER_OPEN`.

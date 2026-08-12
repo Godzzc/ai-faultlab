@@ -308,7 +308,7 @@ Dataset:
 faultlab-ai-service/evaluation/rag_eval_cases.json
 ```
 
-The evaluation dataset now contains 57 cases, expanded from the original 9-case baseline. It covers MQ backlog, thread pool saturation, idempotency conflict, cache failure, and database bottleneck situations while keeping expected references strict at `docId + section`.
+The evaluation dataset now contains 72 cases, expanded from the original 9-case baseline. It covers MQ backlog, thread pool saturation, idempotency conflict, cache failure, database bottleneck, and downstream resilience situations while keeping expected references strict at `docId + section`.
 
 Metrics:
 
@@ -493,7 +493,7 @@ The Python AI service now includes cache failure Runbooks for:
 - `CACHE_BREAKDOWN`
 - `CACHE_AVALANCHE`
 
-The v0.9 cache expansion moved the RAG retrieval evaluation dataset from 27 to 42 cases, adding 5 strict `docId + section` cases for each cache fault type. The current v0.10 dataset is 57 cases after database bottleneck additions. Evaluation still measures retrieval only; it does not call the LLM, Java backend, or frontend. BM25-like retrieval remains a lightweight dependency-free scorer, not a standard search-engine BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus and embedding/index availability.
+The v0.9 cache expansion moved the RAG retrieval evaluation dataset from 27 to 42 cases, adding 5 strict `docId + section` cases for each cache fault type. The current v0.11 dataset is 72 cases after database bottleneck and downstream resilience additions. Evaluation still measures retrieval only; it does not call the LLM, Java backend, or frontend. BM25-like retrieval remains a lightweight dependency-free scorer, not a standard search-engine BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus and embedding/index availability.
 
 ## v0.10.0 Database Runbooks and RAG Evaluation
 
@@ -504,6 +504,16 @@ The Python AI service now includes database bottleneck Runbooks for:
 - `DB_CONNECTION_POOL_EXHAUSTION`
 
 The RAG retrieval evaluation dataset expands from 42 to 57 cases, adding 5 strict `docId + section` cases for each database fault type. Evaluation still measures retrieval only; BM25-like retrieval remains a lightweight dependency-free scorer, not a standard BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus, embedding service availability, and a current vector index.
+
+## v0.11.0 Downstream Runbooks and RAG Evaluation
+
+The Python AI service now includes downstream resilience Runbooks for:
+
+- `DOWNSTREAM_TIMEOUT`
+- `RETRY_STORM`
+- `CIRCUIT_BREAKER_OPEN`
+
+The RAG retrieval evaluation dataset expands from 57 to 72 cases, adding 5 strict `docId + section` cases for each downstream fault type. Evaluation still measures retrieval only; BM25-like retrieval remains a lightweight dependency-free scorer, not a standard BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus, embedding service availability, and a current vector index. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
 
 ## v0.10.0 Database Bottleneck Scenarios
 
@@ -558,3 +568,61 @@ Example requests:
 ```
 
 These scenarios generate FaultMetric records, Trace child spans, rule diagnosis results, and EvidencePackage input for the existing AI diagnosis chain. They do not add dependencies, change API paths, modify the frontend, or modify the Python AI service.
+
+## v0.11.0 Downstream Resilience Scenarios
+
+The Java backend supports three deterministic downstream resilience drill scenario codes through the existing `POST /api/experiments/start` flow:
+
+- `DOWNSTREAM_TIMEOUT`: simulates slow downstream responses exceeding caller timeout and optional fallback.
+- `RETRY_STORM`: simulates downstream failures causing retry amplification and retry exhaustion.
+- `CIRCUIT_BREAKER_OPEN`: simulates a local circuit breaker opening after high failure or slow-call rate.
+
+Example requests:
+
+```json
+{
+  "scenarioCode": "DOWNSTREAM_TIMEOUT",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "downstreamDelayMs": 300,
+    "timeoutMs": 100,
+    "timeoutRatio": 0.8,
+    "enableFallback": false,
+    "fallbackDelayMs": 10
+  }
+}
+```
+
+```json
+{
+  "scenarioCode": "RETRY_STORM",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "failureRatio": 0.7,
+    "maxRetries": 3,
+    "retryBackoffMs": 20,
+    "enableRetryLimit": false,
+    "enableJitter": false
+  }
+}
+```
+
+```json
+{
+  "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+  "params": {
+    "requestCount": 100,
+    "failureRatio": 0.8,
+    "slowCallRatio": 0.5,
+    "slidingWindowSize": 20,
+    "failureRateThreshold": 0.5,
+    "slowCallThresholdMs": 200,
+    "openDurationMs": 500,
+    "enableFallback": true
+  }
+}
+```
+
+These scenarios generate FaultMetric records, Trace child spans, rule diagnosis results, and EvidencePackage input for the existing AI diagnosis chain. They do not add dependencies, make real downstream calls, change API paths, modify the frontend, or modify the Python AI service.

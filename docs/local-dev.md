@@ -534,9 +534,71 @@ Connection pool exhaustion:
 
 These scenarios are deterministic local simulations. They do not create large MySQL tables, open real long transactions, modify HikariCP settings, exhaust real database connections, or run load tests.
 
-## Cache and Database Runbook Evaluation Local Checks
+## Downstream Resilience Scenario Local Checks
 
-The Python AI service includes v0.9.0 cache Runbooks and v0.10.0 database Runbooks with retrieval evaluation cases:
+The v0.11.0 downstream resilience drills also run through the same Java backend API:
+
+```text
+POST http://localhost:8080/api/experiments/start
+```
+
+Downstream timeout:
+
+```json
+{
+  "scenarioCode": "DOWNSTREAM_TIMEOUT",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "downstreamDelayMs": 300,
+    "timeoutMs": 100,
+    "timeoutRatio": 0.8,
+    "enableFallback": false,
+    "fallbackDelayMs": 10
+  }
+}
+```
+
+Retry storm:
+
+```json
+{
+  "scenarioCode": "RETRY_STORM",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "failureRatio": 0.7,
+    "maxRetries": 3,
+    "retryBackoffMs": 20,
+    "enableRetryLimit": false,
+    "enableJitter": false
+  }
+}
+```
+
+Circuit breaker open:
+
+```json
+{
+  "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+  "params": {
+    "requestCount": 100,
+    "failureRatio": 0.8,
+    "slowCallRatio": 0.5,
+    "slidingWindowSize": 20,
+    "failureRateThreshold": 0.5,
+    "slowCallThresholdMs": 200,
+    "openDurationMs": 500,
+    "enableFallback": true
+  }
+}
+```
+
+These scenarios are deterministic local simulations. They do not start another service, make real HTTP calls, add Resilience4j/Sentinel/OpenFeign, or run load tests.
+
+## Cache, Database, and Downstream Runbook Evaluation Local Checks
+
+The Python AI service includes v0.9.0 cache Runbooks, v0.10.0 database Runbooks, and v0.11.0 downstream Runbooks with retrieval evaluation cases:
 
 - `CACHE_PENETRATION`
 - `CACHE_BREAKDOWN`
@@ -544,8 +606,11 @@ The Python AI service includes v0.9.0 cache Runbooks and v0.10.0 database Runboo
 - `DB_SLOW_QUERY`
 - `DB_LOCK_CONTENTION`
 - `DB_CONNECTION_POOL_EXHAUSTION`
+- `DOWNSTREAM_TIMEOUT`
+- `RETRY_STORM`
+- `CIRCUIT_BREAKER_OPEN`
 
-The evaluation dataset now contains 57 cases, expanded from 42 by adding 15 database cases. The cache and database cases still use strict `docId + section` expected references.
+The evaluation dataset now contains 72 cases, expanded from 57 by adding 15 downstream cases. The cache, database, and downstream cases still use strict `docId + section` expected references. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
 
 Run local checks:
 
@@ -557,4 +622,4 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
 ```
 
-BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache or database Runbooks have not been indexed into Milvus, Milvus-only results for those fault types can be empty while BM25 still works.
+BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache, database, or downstream Runbooks have not been indexed into Milvus, Milvus-only results for those fault types can be empty while BM25 still works.
