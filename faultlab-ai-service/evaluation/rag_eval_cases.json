@@ -2563,5 +2563,669 @@
         "section": "风险提示"
       }
     ]
+  },
+  {
+    "caseId": "downstream_timeout_slow_call",
+    "scenarioCode": "DOWNSTREAM_TIMEOUT",
+    "query": {
+      "ruleResult": {
+        "faultType": "DOWNSTREAM_TIMEOUT",
+        "faultName": "下游接口超时",
+        "reason": "slow downstream response: downstreamDelayMs is greater than timeoutMs and downstream latency keeps rising.",
+        "evidence": [
+          "downstreamDelayMs=300",
+          "timeoutMs=100",
+          "downstream.timeout.rate=0.8",
+          "slow downstream"
+        ],
+        "suggestions": [
+          "check timeout config",
+          "add fallback",
+          "bulkhead isolation for downstream call"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.timeout.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.avg.latency.ms",
+          "metricValue": "240",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.max.latency.ms",
+          "metricValue": "300",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "downstream-timeout",
+        "section": "核心指标"
+      },
+      {
+        "docId": "downstream-timeout",
+        "section": "现象"
+      }
+    ]
+  },
+  {
+    "caseId": "downstream_timeout_error_spike",
+    "scenarioCode": "DOWNSTREAM_TIMEOUT",
+    "query": {
+      "ruleResult": {
+        "faultType": "DOWNSTREAM_TIMEOUT",
+        "faultName": "下游接口超时",
+        "reason": "timeout without fallback causes API error spike; api.error.count rises with downstream.timeout.count.",
+        "evidence": [
+          "enableFallback=false",
+          "downstream.timeout.count=80",
+          "api.error.count=80",
+          "timeout rate high"
+        ],
+        "suggestions": [
+          "enable service degradation",
+          "configure fallback",
+          "reduce synchronous dependency"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.timeout.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "api.error.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "downstream-timeout",
+        "section": "现象"
+      },
+      {
+        "docId": "downstream-timeout",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "downstream_timeout_fallback",
+    "scenarioCode": "DOWNSTREAM_TIMEOUT",
+    "query": {
+      "ruleResult": {
+        "faultType": "DOWNSTREAM_TIMEOUT",
+        "faultName": "下游接口超时",
+        "reason": "fallback executes after downstream timeout, downstream.fallback.count increases and api.error.count decreases.",
+        "evidence": [
+          "enableFallback=true",
+          "downstream.fallback.count=80",
+          "api.error.count=0"
+        ],
+        "suggestions": [
+          "verify fallback result",
+          "use local cache fallback",
+          "service degradation should be explicit"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.fallback.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "api.success.count",
+          "metricValue": "100",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "downstream-timeout",
+        "section": "修复建议"
+      },
+      {
+        "docId": "downstream-timeout",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "downstream_timeout_bulkhead_isolation",
+    "scenarioCode": "DOWNSTREAM_TIMEOUT",
+    "query": {
+      "ruleResult": {
+        "faultType": "DOWNSTREAM_TIMEOUT",
+        "faultName": "下游接口超时",
+        "reason": "slow downstream blocks caller threads; missing bulkhead isolation or thread pool isolation spreads latency to main API.",
+        "evidence": [
+          "concurrency=20",
+          "downstream.avg.latency.ms=240",
+          "thread blocked by remote call",
+          "bulkhead isolation missing"
+        ],
+        "suggestions": [
+          "bulkhead isolation",
+          "thread pool isolation",
+          "limit downstream concurrency"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "api.avg.latency.ms",
+          "metricValue": "250",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.slow.call.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "downstream-timeout",
+        "section": "修复建议"
+      },
+      {
+        "docId": "downstream-timeout",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "downstream_timeout_timeout_config",
+    "scenarioCode": "DOWNSTREAM_TIMEOUT",
+    "query": {
+      "ruleResult": {
+        "faultType": "DOWNSTREAM_TIMEOUT",
+        "faultName": "下游接口超时",
+        "reason": "timeout config is not aligned with downstream latency; timeoutMs may be too short or too long for this dependency.",
+        "evidence": [
+          "timeoutMs=100",
+          "downstream.max.latency.ms=300",
+          "timeout config",
+          "downstreamDelayMs=300"
+        ],
+        "suggestions": [
+          "set reasonable timeoutMs",
+          "separate timeout by endpoint",
+          "monitor timeout rate"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.timeout.rate",
+          "metricValue": "0.8",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.max.latency.ms",
+          "metricValue": "300",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "downstream-timeout",
+        "section": "风险提示"
+      },
+      {
+        "docId": "downstream-timeout",
+        "section": "修复建议"
+      }
+    ]
+  },
+  {
+    "caseId": "retry_storm_retry_amplification",
+    "scenarioCode": "RETRY_STORM",
+    "query": {
+      "ruleResult": {
+        "faultType": "RETRY_STORM",
+        "faultName": "重试风暴",
+        "reason": "retry amplification factor is high: downstream.total.call.count is much larger than downstream.initial.request.count.",
+        "evidence": [
+          "downstream.initial.request.count=100",
+          "downstream.total.call.count=310",
+          "downstream.retry.amplification.factor=3.1"
+        ],
+        "suggestions": [
+          "limit maxRetries",
+          "add retry budget",
+          "use circuit breaker"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.initial.request.count",
+          "metricValue": "100",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.total.call.count",
+          "metricValue": "310",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.retry.amplification.factor",
+          "metricValue": "3.1",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "retry-storm",
+        "section": "核心指标"
+      },
+      {
+        "docId": "retry-storm",
+        "section": "现象"
+      }
+    ]
+  },
+  {
+    "caseId": "retry_storm_retry_exhausted",
+    "scenarioCode": "RETRY_STORM",
+    "query": {
+      "ruleResult": {
+        "faultType": "RETRY_STORM",
+        "faultName": "重试风暴",
+        "reason": "retry exhausted remains high after maxRetries, so retries add load but do not recover downstream failure.",
+        "evidence": [
+          "downstream.retry.exhausted.count=70",
+          "maxRetries=3",
+          "failureRatio=0.7",
+          "api.error.count=70"
+        ],
+        "suggestions": [
+          "stop retry when exhausted",
+          "fallback instead of repeated retry",
+          "circuit breaker"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.retry.exhausted.count",
+          "metricValue": "70",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "api.error.count",
+          "metricValue": "70",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "retry-storm",
+        "section": "常见原因"
+      },
+      {
+        "docId": "retry-storm",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "retry_storm_without_jitter",
+    "scenarioCode": "RETRY_STORM",
+    "query": {
+      "ruleResult": {
+        "faultType": "RETRY_STORM",
+        "faultName": "重试风暴",
+        "reason": "without jitter, retry attempts concentrate in the same time window and create a retry traffic spike.",
+        "evidence": [
+          "enableJitter=false",
+          "retryBackoffMs=20",
+          "downstream.retry.count=210",
+          "retry traffic spike"
+        ],
+        "suggestions": [
+          "add jitter",
+          "use exponential backoff",
+          "avoid synchronized retries"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.retry.count",
+          "metricValue": "210",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.retry.rate",
+          "metricValue": "2.1",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "retry-storm",
+        "section": "修复建议"
+      },
+      {
+        "docId": "retry-storm",
+        "section": "常见原因"
+      }
+    ]
+  },
+  {
+    "caseId": "retry_storm_retry_budget",
+    "scenarioCode": "RETRY_STORM",
+    "query": {
+      "ruleResult": {
+        "faultType": "RETRY_STORM",
+        "faultName": "重试风暴",
+        "reason": "no retry budget or retry limit: failed calls continue to retry and consume downstream capacity.",
+        "evidence": [
+          "enableRetryLimit=false",
+          "retry budget missing",
+          "downstream.retry.amplification.factor=3.1"
+        ],
+        "suggestions": [
+          "set retry budget",
+          "enable retry limit",
+          "cap retries per time window"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.retry.amplification.factor",
+          "metricValue": "3.1",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.retry.count",
+          "metricValue": "210",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "retry-storm",
+        "section": "修复建议"
+      },
+      {
+        "docId": "retry-storm",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "retry_storm_multi_layer_retry",
+    "scenarioCode": "RETRY_STORM",
+    "query": {
+      "ruleResult": {
+        "faultType": "RETRY_STORM",
+        "faultName": "重试风暴",
+        "reason": "multi-layer retry exists in gateway, SDK, business service, and MQ consumer, multiplying downstream calls.",
+        "evidence": [
+          "multi-layer retry",
+          "gateway retry",
+          "SDK retry",
+          "downstream.total.call.count=310"
+        ],
+        "suggestions": [
+          "centralize retry policy",
+          "avoid multi-layer retry",
+          "only idempotent retry"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "downstream.total.call.count",
+          "metricValue": "310",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.failure.count",
+          "metricValue": "280",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "retry-storm",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "retry-storm",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "circuit_breaker_failure_rate",
+    "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CIRCUIT_BREAKER_OPEN",
+        "faultName": "熔断器打开",
+        "reason": "failure rate threshold is exceeded; circuit breaker transitions from CLOSED to OPEN.",
+        "evidence": [
+          "circuit.failure.rate=0.8",
+          "failure rate threshold=0.5",
+          "circuit.open.count=1"
+        ],
+        "suggestions": [
+          "check failure rate threshold",
+          "configure circuit breaker",
+          "fallback after open"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "circuit.failure.rate",
+          "metricValue": "0.8",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "circuit.open.count",
+          "metricValue": "1",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "circuit-breaker-open",
+        "section": "核心指标"
+      },
+      {
+        "docId": "circuit-breaker-open",
+        "section": "现象"
+      }
+    ]
+  },
+  {
+    "caseId": "circuit_breaker_slow_call_rate",
+    "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CIRCUIT_BREAKER_OPEN",
+        "faultName": "熔断器打开",
+        "reason": "slow call rate is high; circuit opens even when the downstream is not completely failed.",
+        "evidence": [
+          "circuit.slow.call.rate=0.5",
+          "slow call rate threshold",
+          "slowCallThresholdMs=200"
+        ],
+        "suggestions": [
+          "monitor slow call rate",
+          "tune slow call threshold",
+          "investigate downstream latency"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "circuit.slow.call.count",
+          "metricValue": "10",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "circuit.slow.call.rate",
+          "metricValue": "0.5",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "circuit-breaker-open",
+        "section": "常见原因"
+      },
+      {
+        "docId": "circuit-breaker-open",
+        "section": "核心指标"
+      }
+    ]
+  },
+  {
+    "caseId": "circuit_breaker_open_reject",
+    "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CIRCUIT_BREAKER_OPEN",
+        "faultName": "熔断器打开",
+        "reason": "after circuit open, requests are rejected quickly and downstream calls are skipped.",
+        "evidence": [
+          "circuit.open.count=1",
+          "circuit.rejected.count=80",
+          "downstream.call.skipped.count=80",
+          "rejected request"
+        ],
+        "suggestions": [
+          "verify fallback",
+          "reduce rejected request impact",
+          "monitor downstream call skipped"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "circuit.rejected.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "downstream.call.skipped.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "circuit-breaker-open",
+        "section": "现象"
+      },
+      {
+        "docId": "circuit-breaker-open",
+        "section": "排查步骤"
+      }
+    ]
+  },
+  {
+    "caseId": "circuit_breaker_fallback",
+    "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CIRCUIT_BREAKER_OPEN",
+        "faultName": "熔断器打开",
+        "reason": "OPEN state uses fallback instead of direct error; circuit.fallback.count rises while downstream calls are skipped.",
+        "evidence": [
+          "enableFallback=true",
+          "circuit.fallback.count=80",
+          "downstream.call.skipped.count=80"
+        ],
+        "suggestions": [
+          "design fallback result",
+          "return cache or default value",
+          "make degradation visible"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "circuit.fallback.count",
+          "metricValue": "80",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "api.error.count",
+          "metricValue": "16",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "circuit-breaker-open",
+        "section": "修复建议"
+      },
+      {
+        "docId": "circuit-breaker-open",
+        "section": "风险提示"
+      }
+    ]
+  },
+  {
+    "caseId": "circuit_breaker_half_open_recovery",
+    "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+    "query": {
+      "ruleResult": {
+        "faultType": "CIRCUIT_BREAKER_OPEN",
+        "faultName": "熔断器打开",
+        "reason": "half open recovery probe must be controlled before restoring traffic from OPEN to CLOSED.",
+        "evidence": [
+          "circuit.half.open.count=1",
+          "openDurationMs=500",
+          "recovery probe",
+          "half open"
+        ],
+        "suggestions": [
+          "monitor HALF_OPEN probes",
+          "gradually restore traffic",
+          "avoid threshold too low"
+        ]
+      },
+      "metrics": [
+        {
+          "metricName": "circuit.half.open.count",
+          "metricValue": "1",
+          "component": "Downstream"
+        },
+        {
+          "metricName": "circuit.open.count",
+          "metricValue": "1",
+          "component": "Downstream"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "docId": "circuit-breaker-open",
+        "section": "排查步骤"
+      },
+      {
+        "docId": "circuit-breaker-open",
+        "section": "风险提示"
+      }
+    ]
   }
 ]

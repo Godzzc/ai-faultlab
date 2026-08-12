@@ -596,9 +596,9 @@ Circuit breaker open:
 
 These scenarios are deterministic local simulations. They do not start another service, make real HTTP calls, add Resilience4j/Sentinel/OpenFeign, or run load tests.
 
-## Cache and Database Runbook Evaluation Local Checks
+## Cache, Database, and Downstream Runbook Evaluation Local Checks
 
-The Python AI service includes v0.9.0 cache Runbooks and v0.10.0 database Runbooks with retrieval evaluation cases:
+The Python AI service includes v0.9.0 cache Runbooks, v0.10.0 database Runbooks, and v0.11.0 downstream Runbooks with retrieval evaluation cases:
 
 - `CACHE_PENETRATION`
 - `CACHE_BREAKDOWN`
@@ -606,8 +606,11 @@ The Python AI service includes v0.9.0 cache Runbooks and v0.10.0 database Runboo
 - `DB_SLOW_QUERY`
 - `DB_LOCK_CONTENTION`
 - `DB_CONNECTION_POOL_EXHAUSTION`
+- `DOWNSTREAM_TIMEOUT`
+- `RETRY_STORM`
+- `CIRCUIT_BREAKER_OPEN`
 
-The evaluation dataset now contains 57 cases, expanded from 42 by adding 15 database cases. The cache and database cases still use strict `docId + section` expected references.
+The evaluation dataset now contains 72 cases, expanded from 57 by adding 15 downstream cases. The cache, database, and downstream cases still use strict `docId + section` expected references. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
 
 Run local checks:
 
@@ -619,4 +622,4 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
 ```
 
-BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache or database Runbooks have not been indexed into Milvus, Milvus-only results for those fault types can be empty while BM25 still works.
+BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache, database, or downstream Runbooks have not been indexed into Milvus, Milvus-only results for those fault types can be empty while BM25 still works.
