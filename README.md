@@ -308,7 +308,7 @@ Dataset:
 faultlab-ai-service/evaluation/rag_eval_cases.json
 ```
 
-The evaluation dataset now contains 57 cases, expanded from the original 9-case baseline. It covers MQ backlog, thread pool saturation, idempotency conflict, cache failure, and database bottleneck situations while keeping expected references strict at `docId + section`.
+The evaluation dataset now contains 72 cases, expanded from the original 9-case baseline. It covers MQ backlog, thread pool saturation, idempotency conflict, cache failure, database bottleneck, and downstream resilience situations while keeping expected references strict at `docId + section`.
 
 Metrics:
 
@@ -493,7 +493,7 @@ The Python AI service now includes cache failure Runbooks for:
 - `CACHE_BREAKDOWN`
 - `CACHE_AVALANCHE`
 
-The v0.9 cache expansion moved the RAG retrieval evaluation dataset from 27 to 42 cases, adding 5 strict `docId + section` cases for each cache fault type. The current v0.10 dataset is 57 cases after database bottleneck additions. Evaluation still measures retrieval only; it does not call the LLM, Java backend, or frontend. BM25-like retrieval remains a lightweight dependency-free scorer, not a standard search-engine BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus and embedding/index availability.
+The v0.9 cache expansion moved the RAG retrieval evaluation dataset from 27 to 42 cases, adding 5 strict `docId + section` cases for each cache fault type. The current v0.11 dataset is 72 cases after database bottleneck and downstream resilience additions. Evaluation still measures retrieval only; it does not call the LLM, Java backend, or frontend. BM25-like retrieval remains a lightweight dependency-free scorer, not a standard search-engine BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus and embedding/index availability.
 
 ## v0.10.0 Database Runbooks and RAG Evaluation
 
@@ -504,6 +504,16 @@ The Python AI service now includes database bottleneck Runbooks for:
 - `DB_CONNECTION_POOL_EXHAUSTION`
 
 The RAG retrieval evaluation dataset expands from 42 to 57 cases, adding 5 strict `docId + section` cases for each database fault type. Evaluation still measures retrieval only; BM25-like retrieval remains a lightweight dependency-free scorer, not a standard BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus, embedding service availability, and a current vector index.
+
+## v0.11.0 Downstream Runbooks and RAG Evaluation
+
+The Python AI service now includes downstream resilience Runbooks for:
+
+- `DOWNSTREAM_TIMEOUT`
+- `RETRY_STORM`
+- `CIRCUIT_BREAKER_OPEN`
+
+The RAG retrieval evaluation dataset expands from 57 to 72 cases, adding 5 strict `docId + section` cases for each downstream fault type. Evaluation still measures retrieval only; BM25-like retrieval remains a lightweight dependency-free scorer, not a standard BM25 implementation. The lightweight reranker is still rule-based and is not a real rerank model. Hybrid and Milvus evaluation still depend on local Milvus, embedding service availability, and a current vector index. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
 
 ## v0.10.0 Database Bottleneck Scenarios
 

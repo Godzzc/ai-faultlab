@@ -44,6 +44,18 @@ Each database Runbook uses the same six sections: `现象`, `核心指标`, `常
 
 The retrieval architecture is still unchanged. BM25-like remains dependency-free and is not standard BM25. Lightweight rerank is still rule-based and not a real rerank model. Hybrid and Milvus continue to depend on local Milvus, embedding availability, and whether new Runbook chunks have been indexed.
 
+## v0.11 Downstream Runbooks
+
+v0.11.0 adds three downstream timeout and resilience Runbooks under `faultlab-ai-service/runbooks`:
+
+- `downstream-timeout.md` for `DOWNSTREAM_TIMEOUT`
+- `retry-storm.md` for `RETRY_STORM`
+- `circuit-breaker-open.md` for `CIRCUIT_BREAKER_OPEN`
+
+Each downstream Runbook uses the same six sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. Front matter keeps strict `docId`, `faultType`, and keywords that include Java backend metric fields such as `downstream.timeout.count`, `downstream.retry.amplification.factor`, and `circuit.open.count`.
+
+The retrieval architecture is still unchanged. BM25-like remains dependency-free and is not standard BM25. Lightweight rerank is still rule-based and not a real rerank model. Hybrid and Milvus continue to depend on local Milvus, embedding availability, and whether new Runbook chunks have been indexed. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
+
 本文档描述 AI FaultLab 当前 v0.5 RAG Demo 的架构。它强调当前已经实现的工程链路、降级策略和评测能力，也明确当前不是生产级知识管理平台。
 
 ## 1. 总体架构

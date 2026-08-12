@@ -17,6 +17,9 @@ FAULT_TYPE_PREFIXES = {
     "db_slow_query_": "DB_SLOW_QUERY",
     "db_lock_contention_": "DB_LOCK_CONTENTION",
     "db_connection_pool_": "DB_CONNECTION_POOL_EXHAUSTION",
+    "downstream_timeout_": "DOWNSTREAM_TIMEOUT",
+    "retry_storm_": "RETRY_STORM",
+    "circuit_breaker_": "CIRCUIT_BREAKER_OPEN",
 }
 
 
