@@ -12,6 +12,9 @@ import com.faultlab.backend.scenario.cache.CachePenetrationScenario;
 import com.faultlab.backend.scenario.db.DbConnectionPoolExhaustionScenario;
 import com.faultlab.backend.scenario.db.DbLockContentionScenario;
 import com.faultlab.backend.scenario.db.DbSlowQueryScenario;
+import com.faultlab.backend.scenario.downstream.CircuitBreakerOpenScenario;
+import com.faultlab.backend.scenario.downstream.DownstreamTimeoutScenario;
+import com.faultlab.backend.scenario.downstream.RetryStormScenario;
 import com.faultlab.backend.scenario.impl.IdempotencyConflictScenario;
 import com.faultlab.backend.scenario.impl.ThreadPoolSaturationScenario;
 import com.faultlab.backend.scenario.mq.MqBacklogScenario;
@@ -52,6 +55,9 @@ class ExperimentServiceTests {
     private final FaultScenario dbSlowQueryScenario = mock(FaultScenario.class);
     private final FaultScenario dbLockContentionScenario = mock(FaultScenario.class);
     private final FaultScenario dbConnectionPoolExhaustionScenario = mock(FaultScenario.class);
+    private final FaultScenario downstreamTimeoutScenario = mock(FaultScenario.class);
+    private final FaultScenario retryStormScenario = mock(FaultScenario.class);
+    private final FaultScenario circuitBreakerOpenScenario = mock(FaultScenario.class);
     private ExperimentService experimentService;
 
     @BeforeEach
@@ -74,6 +80,12 @@ class ExperimentServiceTests {
         when(dbLockContentionScenario.scenarioName()).thenReturn(DbLockContentionScenario.SCENARIO_NAME);
         when(dbConnectionPoolExhaustionScenario.scenarioCode()).thenReturn(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION);
         when(dbConnectionPoolExhaustionScenario.scenarioName()).thenReturn(DbConnectionPoolExhaustionScenario.SCENARIO_NAME);
+        when(downstreamTimeoutScenario.scenarioCode()).thenReturn(ScenarioCode.DOWNSTREAM_TIMEOUT);
+        when(downstreamTimeoutScenario.scenarioName()).thenReturn(DownstreamTimeoutScenario.SCENARIO_NAME);
+        when(retryStormScenario.scenarioCode()).thenReturn(ScenarioCode.RETRY_STORM);
+        when(retryStormScenario.scenarioName()).thenReturn(RetryStormScenario.SCENARIO_NAME);
+        when(circuitBreakerOpenScenario.scenarioCode()).thenReturn(ScenarioCode.CIRCUIT_BREAKER_OPEN);
+        when(circuitBreakerOpenScenario.scenarioName()).thenReturn(CircuitBreakerOpenScenario.SCENARIO_NAME);
         experimentService = new ExperimentService(
                 experimentRecordService,
                 traceManager,
@@ -86,7 +98,10 @@ class ExperimentServiceTests {
                         cacheAvalancheScenario,
                         dbSlowQueryScenario,
                         dbLockContentionScenario,
-                        dbConnectionPoolExhaustionScenario
+                        dbConnectionPoolExhaustionScenario,
+                        downstreamTimeoutScenario,
+                        retryStormScenario,
+                        circuitBreakerOpenScenario
                 )
         );
     }
@@ -281,6 +296,66 @@ class ExperimentServiceTests {
                 eq(response.getTraceId())
         );
         verify(dbConnectionPoolExhaustionScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartDownstreamTimeoutScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.DOWNSTREAM_TIMEOUT);
+        request.setParams(Map.of("requestCount", 100, "concurrency", 20, "timeoutRatio", 0.8));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.DOWNSTREAM_TIMEOUT),
+                eq(DownstreamTimeoutScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(downstreamTimeoutScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartRetryStormScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.RETRY_STORM);
+        request.setParams(Map.of("requestCount", 100, "failureRatio", 0.7, "maxRetries", 3));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.RETRY_STORM),
+                eq(RetryStormScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(retryStormScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
+    }
+
+    @Test
+    void shouldStartCircuitBreakerOpenScenario() {
+        StartExperimentRequest request = new StartExperimentRequest();
+        request.setScenarioCode(ScenarioCode.CIRCUIT_BREAKER_OPEN);
+        request.setParams(Map.of("requestCount", 100, "failureRatio", 0.8, "slidingWindowSize", 20));
+
+        StartExperimentResponse response = experimentService.startExperiment(request);
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        assertThat(response.getTraceId()).isNotBlank();
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.CIRCUIT_BREAKER_OPEN),
+                eq(CircuitBreakerOpenScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId())
+        );
+        verify(circuitBreakerOpenScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
 
     @Test

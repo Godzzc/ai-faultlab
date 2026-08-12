@@ -28,6 +28,9 @@ Supported scenario codes:
 - `DB_SLOW_QUERY`
 - `DB_LOCK_CONTENTION`
 - `DB_CONNECTION_POOL_EXHAUSTION`
+- `DOWNSTREAM_TIMEOUT`
+- `RETRY_STORM`
+- `CIRCUIT_BREAKER_OPEN`
 
 ## v0.9.0 Cache Scenarios
 
@@ -68,3 +71,17 @@ The database scenarios live in the backend `scenario.db` package and use determi
 Each database scenario records the shared root `experiment.start` span plus scenario child spans such as `db.query`, `db.scan.rows`, `db.explain.check`, `db.transaction.begin`, `db.lock.acquire`, `db.lock.wait`, `db.update.row`, `db.connection.acquire`, `db.connection.wait`, `db.query.execute`, and `db.connection.release`.
 
 Database rule diagnosis is handled by `DbFailureRuleDiagnoser`. `EvidencePackageBuilder` remains scenario-code agnostic, so `DB_SLOW_QUERY`, `DB_LOCK_CONTENTION`, and `DB_CONNECTION_POOL_EXHAUSTION` enter the existing AI diagnosis request chain without API changes.
+
+## v0.11.0 Downstream Resilience Scenarios
+
+The downstream scenarios live in the backend `scenario.downstream` package and use deterministic in-process simulation. They do not start another service, make real HTTP calls, add Resilience4j/Sentinel/OpenFeign, or run benchmark traffic.
+
+`DOWNSTREAM_TIMEOUT` simulates slow downstream responses exceeding the caller timeout. Fallback mode converts timeout failures into fallback successes and lowers API error count.
+
+`RETRY_STORM` simulates upstream retries after downstream failures. It records total downstream call amplification, retry count, retry exhaustion, and API error metrics. Retry limit mode caps retry amplification.
+
+`CIRCUIT_BREAKER_OPEN` simulates a lightweight local circuit breaker. High failure or slow-call rate opens the breaker, skips downstream calls, and either rejects requests or sends them to fallback.
+
+Each downstream scenario records the shared root `experiment.start` span plus scenario child spans such as `downstream.call`, `downstream.timeout`, `retry.attempt`, `retry.exhausted`, `circuit.evaluate`, `circuit.open`, `circuit.reject`, and `fallback.execute`.
+
+Downstream rule diagnosis is handled by `DownstreamFailureRuleDiagnoser`. `EvidencePackageBuilder` remains scenario-code agnostic, so `DOWNSTREAM_TIMEOUT`, `RETRY_STORM`, and `CIRCUIT_BREAKER_OPEN` enter the existing AI diagnosis request chain without API changes.

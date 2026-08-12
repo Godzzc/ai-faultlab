@@ -534,6 +534,68 @@ Connection pool exhaustion:
 
 These scenarios are deterministic local simulations. They do not create large MySQL tables, open real long transactions, modify HikariCP settings, exhaust real database connections, or run load tests.
 
+## Downstream Resilience Scenario Local Checks
+
+The v0.11.0 downstream resilience drills also run through the same Java backend API:
+
+```text
+POST http://localhost:8080/api/experiments/start
+```
+
+Downstream timeout:
+
+```json
+{
+  "scenarioCode": "DOWNSTREAM_TIMEOUT",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "downstreamDelayMs": 300,
+    "timeoutMs": 100,
+    "timeoutRatio": 0.8,
+    "enableFallback": false,
+    "fallbackDelayMs": 10
+  }
+}
+```
+
+Retry storm:
+
+```json
+{
+  "scenarioCode": "RETRY_STORM",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "failureRatio": 0.7,
+    "maxRetries": 3,
+    "retryBackoffMs": 20,
+    "enableRetryLimit": false,
+    "enableJitter": false
+  }
+}
+```
+
+Circuit breaker open:
+
+```json
+{
+  "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+  "params": {
+    "requestCount": 100,
+    "failureRatio": 0.8,
+    "slowCallRatio": 0.5,
+    "slidingWindowSize": 20,
+    "failureRateThreshold": 0.5,
+    "slowCallThresholdMs": 200,
+    "openDurationMs": 500,
+    "enableFallback": true
+  }
+}
+```
+
+These scenarios are deterministic local simulations. They do not start another service, make real HTTP calls, add Resilience4j/Sentinel/OpenFeign, or run load tests.
+
 ## Cache and Database Runbook Evaluation Local Checks
 
 The Python AI service includes v0.9.0 cache Runbooks and v0.10.0 database Runbooks with retrieval evaluation cases:
