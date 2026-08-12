@@ -113,6 +113,23 @@ class EvidencePackageBuilderTests {
         assertThat(request.metrics().get(0).metricName()).isEqualTo("db.connection.acquire.timeout.count");
     }
 
+    @Test
+    void shouldBuildEvidencePackageForDownstreamFaultType() throws JsonProcessingException {
+        RuleDiagnosisResult ruleResult = ruleResult(ScenarioCode.DOWNSTREAM_TIMEOUT);
+        DiagnosisReport report = new DiagnosisReport();
+        report.setRuleResultJson(objectMapper.writeValueAsString(ruleResult));
+        when(faultExperimentMapper.selectOne(any(Wrapper.class))).thenReturn(experiment(ScenarioCode.DOWNSTREAM_TIMEOUT));
+        when(faultMetricMapper.selectList(any(Wrapper.class))).thenReturn(List.of(metric("downstream.timeout.count", 80)));
+        when(traceQueryService.getTraceTree("trace-1")).thenReturn(new TraceTreeResponse("trace-1", List.of()));
+        when(diagnosisReportMapper.selectOne(any(Wrapper.class))).thenReturn(report);
+
+        AiDiagnosisRequest request = builder.build("exp-1");
+
+        assertThat(request.experiment().scenarioCode()).isEqualTo(ScenarioCode.DOWNSTREAM_TIMEOUT);
+        assertThat(request.ruleResult().getFaultType()).isEqualTo(ScenarioCode.DOWNSTREAM_TIMEOUT);
+        assertThat(request.metrics().get(0).metricName()).isEqualTo("downstream.timeout.count");
+    }
+
     private FaultExperiment experiment() {
         return experiment(ScenarioCode.MQ_BACKLOG);
     }

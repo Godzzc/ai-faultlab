@@ -558,3 +558,61 @@ Example requests:
 ```
 
 These scenarios generate FaultMetric records, Trace child spans, rule diagnosis results, and EvidencePackage input for the existing AI diagnosis chain. They do not add dependencies, change API paths, modify the frontend, or modify the Python AI service.
+
+## v0.11.0 Downstream Resilience Scenarios
+
+The Java backend supports three deterministic downstream resilience drill scenario codes through the existing `POST /api/experiments/start` flow:
+
+- `DOWNSTREAM_TIMEOUT`: simulates slow downstream responses exceeding caller timeout and optional fallback.
+- `RETRY_STORM`: simulates downstream failures causing retry amplification and retry exhaustion.
+- `CIRCUIT_BREAKER_OPEN`: simulates a local circuit breaker opening after high failure or slow-call rate.
+
+Example requests:
+
+```json
+{
+  "scenarioCode": "DOWNSTREAM_TIMEOUT",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "downstreamDelayMs": 300,
+    "timeoutMs": 100,
+    "timeoutRatio": 0.8,
+    "enableFallback": false,
+    "fallbackDelayMs": 10
+  }
+}
+```
+
+```json
+{
+  "scenarioCode": "RETRY_STORM",
+  "params": {
+    "requestCount": 100,
+    "concurrency": 20,
+    "failureRatio": 0.7,
+    "maxRetries": 3,
+    "retryBackoffMs": 20,
+    "enableRetryLimit": false,
+    "enableJitter": false
+  }
+}
+```
+
+```json
+{
+  "scenarioCode": "CIRCUIT_BREAKER_OPEN",
+  "params": {
+    "requestCount": 100,
+    "failureRatio": 0.8,
+    "slowCallRatio": 0.5,
+    "slidingWindowSize": 20,
+    "failureRateThreshold": 0.5,
+    "slowCallThresholdMs": 200,
+    "openDurationMs": 500,
+    "enableFallback": true
+  }
+}
+```
+
+These scenarios generate FaultMetric records, Trace child spans, rule diagnosis results, and EvidencePackage input for the existing AI diagnosis chain. They do not add dependencies, make real downstream calls, change API paths, modify the frontend, or modify the Python AI service.
