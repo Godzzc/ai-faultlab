@@ -269,6 +269,14 @@ const scenarios = [
 ]
 
 const highlightedMetricNames = {
+  MQ_BACKLOG: ['publishCount', 'consumeCount', 'backlogCount', 'avgConsumeMs'],
+  THREAD_POOL_SATURATION: [
+    'activeThreadCount',
+    'maximumPoolSize',
+    'queueSize',
+    'rejectedTaskCount',
+  ],
+  IDEMPOTENCY_CONFLICT: ['requestCount', 'duplicateCount', 'conflictCount', 'hashMismatchCount'],
   CACHE_PENETRATION: [
     'cache.request.count',
     'cache.miss.rate',
@@ -350,6 +358,56 @@ const highlightedMetricNames = {
     'downstream.call.skipped.count',
   ],
 }
+
+const scenarioGroups = [
+  {
+    title: '基础后端稳定性',
+    description: '从消息堆积、线程池资源和幂等冲突切入，适合展示基础服务治理问题。',
+    scenarioCodes: ['MQ_BACKLOG', 'THREAD_POOL_SATURATION', 'IDEMPOTENCY_CONFLICT'],
+  },
+  {
+    title: '缓存故障',
+    description: '覆盖穿透、击穿、雪崩三类经典缓存异常，指标变化直观，适合演示排查闭环。',
+    scenarioCodes: ['CACHE_PENETRATION', 'CACHE_BREAKDOWN', 'CACHE_AVALANCHE'],
+  },
+  {
+    title: '数据库瓶颈',
+    description: '模拟慢 SQL、锁竞争和连接池耗尽，突出 DB 侧瓶颈对接口延迟和错误率的影响。',
+    scenarioCodes: ['DB_SLOW_QUERY', 'DB_LOCK_CONTENTION', 'DB_CONNECTION_POOL_EXHAUSTION'],
+  },
+  {
+    title: '下游调用韧性',
+    description: '展示超时、重试放大和熔断打开，适合说明服务依赖治理和降级策略。',
+    scenarioCodes: ['DOWNSTREAM_TIMEOUT', 'RETRY_STORM', 'CIRCUIT_BREAKER_OPEN'],
+  },
+]
+
+const demoPath = [
+  {
+    scenarioCode: 'CACHE_BREAKDOWN',
+    title: '热点 key 击穿',
+    description: '并发请求集中、缓存重建重复，适合讲解 hot key 过期后的 DB 突刺。',
+    metrics: 'cache.rebuild.count / cache.db.query.count',
+  },
+  {
+    scenarioCode: 'DB_CONNECTION_POOL_EXHAUSTION',
+    title: '连接池耗尽',
+    description: 'active 连接接近上限并出现 acquire timeout，适合说明慢查询如何占住连接。',
+    metrics: 'db.pool.active.count / db.connection.acquire.timeout.count',
+  },
+  {
+    scenarioCode: 'DOWNSTREAM_TIMEOUT',
+    title: '下游接口超时',
+    description: '下游延迟超过 timeoutMs，适合展示 fallback 对 API error 的影响。',
+    metrics: 'downstream.timeout.rate / downstream.fallback.count',
+  },
+  {
+    scenarioCode: 'RETRY_STORM',
+    title: '重试风暴',
+    description: '失败后调用量被重试放大，适合讲解 retry budget、jitter 和熔断边界。',
+    metrics: 'downstream.retry.amplification.factor / downstream.retry.count',
+  },
+]
 
 const selectedScenarioCode = ref(scenarios[0].code)
 const params = reactive({ ...scenarios[0].defaults })
@@ -489,6 +547,14 @@ const highlightedMetrics = computed(() => {
     }
   })
 })
+
+function findScenario(code) {
+  return scenarios.find((scenario) => scenario.code === code)
+}
+
+function scenarioMetricPreview(code) {
+  return highlightedMetricNames[code]?.slice(0, 4).join(' / ') || '核心业务指标'
+}
 
 function selectScenario(code) {
   selectedScenarioCode.value = code
@@ -731,14 +797,32 @@ function formatMetadata(metadata) {
 
 <template>
   <main class="dashboard">
-    <header class="topbar">
-      <div>
+    <header class="hero">
+      <div class="hero-content">
         <p class="eyebrow">Fault Simulation Dashboard</p>
-        <h1>AI FaultLab 故障演练与智能诊断平台</h1>
+        <h1>AI FaultLab</h1>
+        <p class="hero-subtitle">后端故障演练与 AI 诊断平台</p>
+        <p class="hero-copy">
+          用于模拟 MQ 堆积、线程池饱和、缓存异常、数据库瓶颈、下游超时等典型后端故障，并通过指标、Trace、规则诊断、Runbook RAG 和 AI 报告形成排查闭环。
+        </p>
+        <div class="capability-tags">
+          <span>Fault Simulation</span>
+          <span>Metrics</span>
+          <span>Trace</span>
+          <span>Rule Diagnosis</span>
+          <span>Runbook RAG</span>
+          <span>AI Report</span>
+        </div>
       </div>
-      <div class="status-strip">
-        <span>Backend</span>
-        <strong>/api</strong>
+      <div class="hero-status">
+        <div class="status-strip dark">
+          <span>Backend</span>
+          <strong>/api</strong>
+        </div>
+        <div class="status-strip dark">
+          <span>AI Service</span>
+          <strong>/ai</strong>
+        </div>
       </div>
     </header>
 
@@ -746,89 +830,137 @@ function formatMetadata(metadata) {
       {{ errorMessage }}
     </section>
 
-    <section class="layout">
-      <aside class="panel control-panel">
-        <div class="section-heading">
-          <h2>场景选择</h2>
-          <span>{{ selectedScenarioCode }}</span>
+    <section class="demo-path panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Demo Path</p>
+          <h2>推荐演示路径</h2>
         </div>
+        <span>4 steps</span>
+      </div>
+      <div class="demo-path-grid">
+        <button
+          v-for="(item, index) in demoPath"
+          :key="item.scenarioCode"
+          class="demo-step"
+          type="button"
+          @click="selectScenario(item.scenarioCode)"
+        >
+          <small>Step {{ index + 1 }} / {{ item.scenarioCode }}</small>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.description }}</span>
+          <em>{{ item.metrics }}</em>
+        </button>
+      </div>
+    </section>
 
-        <div class="scenario-list">
-          <button
-            v-for="scenario in scenarios"
-            :key="scenario.code"
-            class="scenario-button"
-            :class="{ active: selectedScenarioCode === scenario.code }"
-            type="button"
-            @click="selectScenario(scenario.code)"
-          >
-            <strong>{{ scenario.name }}</strong>
-            <small>{{ scenario.alias ? `${scenario.alias} / ${scenario.code}` : scenario.code }}</small>
-            <span>{{ scenario.description }}</span>
-          </button>
-        </div>
+    <section class="workbench">
+      <section class="scenario-workspace">
+        <section class="scenario-catalog panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Scenario Catalog</p>
+              <h2>故障场景选择</h2>
+            </div>
+            <span>{{ selectedScenarioCode }}</span>
+          </div>
 
-        <div class="section-heading compact">
-          <h2>参数配置</h2>
-        </div>
-        <div class="form-grid">
-          <label
-            v-for="field in selectedScenario.fields"
-            :key="field.key"
-            class="field"
-            :class="{ 'check-field form-check-field': field.type === 'boolean' }"
-          >
-            <template v-if="field.type === 'boolean'">
-              <input v-model="params[field.key]" type="checkbox" />
-              <span>{{ field.label }}</span>
-            </template>
-            <template v-else>
-              <span>{{ field.label }}</span>
-              <select v-if="field.type === 'select'" v-model="params[field.key]">
-                <option
-                  v-for="option in field.options"
-                  :key="option.value"
-                  :value="option.value"
+          <div class="scenario-groups">
+            <section v-for="group in scenarioGroups" :key="group.title" class="scenario-group">
+              <div class="scenario-group-heading">
+                <h3>{{ group.title }}</h3>
+                <p>{{ group.description }}</p>
+              </div>
+              <div class="scenario-card-grid">
+                <button
+                  v-for="code in group.scenarioCodes"
+                  :key="code"
+                  class="scenario-card"
+                  :class="{ active: selectedScenarioCode === code }"
+                  type="button"
+                  @click="selectScenario(code)"
                 >
-                  {{ option.label }}
-                </option>
-              </select>
-              <input
-                v-else
-                v-model="params[field.key]"
-                :type="field.type === 'text' ? 'text' : 'number'"
-                :min="field.min"
-                :max="field.max"
-                :step="field.step ?? 1"
-              />
-            </template>
+                  <span class="selected-dot">{{ selectedScenarioCode === code ? 'Selected' : 'Ready' }}</span>
+                  <strong>{{ findScenario(code)?.name }}</strong>
+                  <small>{{ code }}</small>
+                  <p>{{ findScenario(code)?.description }}</p>
+                  <em>{{ scenarioMetricPreview(code) }}</em>
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <aside class="panel control-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Experiment Setup</p>
+              <h2>参数配置</h2>
+            </div>
+            <span>{{ selectedScenarioCode }}</span>
+          </div>
+
+          <div class="selected-scenario-summary">
+            <strong>{{ selectedScenario.name }}</strong>
+            <span>{{ selectedScenario.alias ? `${selectedScenario.alias} / ${selectedScenario.code}` : selectedScenario.code }}</span>
+            <p>{{ selectedScenario.description }}</p>
+          </div>
+
+          <div class="form-grid">
+            <label
+              v-for="field in selectedScenario.fields"
+              :key="field.key"
+              class="field"
+              :class="{ 'check-field form-check-field': field.type === 'boolean' }"
+            >
+              <template v-if="field.type === 'boolean'">
+                <input v-model="params[field.key]" type="checkbox" />
+                <span>{{ field.label }}</span>
+              </template>
+              <template v-else>
+                <span>{{ field.label }}</span>
+                <select v-if="field.type === 'select'" v-model="params[field.key]">
+                  <option
+                    v-for="option in field.options"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <input
+                  v-else
+                  v-model="params[field.key]"
+                  :type="field.type === 'text' ? 'text' : 'number'"
+                  :min="field.min"
+                  :max="field.max"
+                  :step="field.step ?? 1"
+                />
+              </template>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>当前 experimentId</span>
+            <input v-model.trim="currentExperimentId" placeholder="启动后自动填入，也可手动输入" />
           </label>
-        </div>
 
-        <div v-if="selectedScenario.alias" class="scenario-note">
-          {{ selectedScenario.description }}
-        </div>
-
-        <label class="field">
-          <span>当前 experimentId</span>
-          <input v-model.trim="currentExperimentId" placeholder="启动后自动填入，也可手动输入" />
-        </label>
-
-        <div class="actions">
-          <button type="button" :disabled="loading.start" @click="startExperiment">
-            {{ loading.start ? '启动中...' : '开始演练' }}
-          </button>
-          <button type="button" :disabled="loading.diagnosis" @click="runRuleDiagnosis">
-            {{ loading.diagnosis ? '诊断中...' : '执行规则诊断' }}
-          </button>
-          <button type="button" :disabled="loading.ai" @click="generateAiDiagnosis">
-            {{ loading.ai ? 'AI 诊断生成中...' : '生成 AI 诊断报告' }}
-          </button>
-          <button type="button" :disabled="loading.refresh" @click="refreshExperimentData">
-            {{ loading.refresh ? '刷新中...' : '刷新实验数据' }}
-          </button>
-        </div>
-      </aside>
+          <div class="actions">
+            <button type="button" :disabled="loading.start" @click="startExperiment">
+              {{ loading.start ? '启动中...' : '开始演练' }}
+            </button>
+            <button type="button" :disabled="loading.diagnosis" @click="runRuleDiagnosis">
+              {{ loading.diagnosis ? '诊断中...' : '执行规则诊断' }}
+            </button>
+            <button type="button" :disabled="loading.ai" @click="generateAiDiagnosis">
+              {{ loading.ai ? 'AI 诊断生成中...' : '生成 AI 诊断报告' }}
+            </button>
+            <button type="button" :disabled="loading.refresh" @click="refreshExperimentData">
+              {{ loading.refresh ? '刷新中...' : '刷新实验数据' }}
+            </button>
+          </div>
+        </aside>
+      </section>
 
       <section class="content-stack">
         <section class="panel">
