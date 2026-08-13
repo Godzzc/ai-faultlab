@@ -1,5 +1,41 @@
 # AI FaultLab
 
+AI FaultLab is a learning-oriented Java backend fault simulation and AI diagnosis demo. It simulates common backend failure patterns, collects Metrics and Trace spans, runs rule-based diagnosis, retrieves Runbook context, and generates a structured AI diagnosis report.
+
+Current demo scope:
+
+- Basic backend stability: `MQ_BACKLOG`, `THREAD_POOL_SATURATION`, `IDEMPOTENCY_CONFLICT`
+- Cache failures: `CACHE_PENETRATION`, `CACHE_BREAKDOWN`, `CACHE_AVALANCHE`
+- Database bottlenecks: `DB_SLOW_QUERY`, `DB_LOCK_CONTENTION`, `DB_CONNECTION_POOL_EXHAUSTION`
+- Downstream resilience: `DOWNSTREAM_TIMEOUT`, `RETRY_STORM`, `CIRCUIT_BREAKER_OPEN`
+
+Demo entry:
+
+- [AI FaultLab Demo Guide](docs/demo-guide.md)
+- Local frontend: `http://localhost:5173`
+
+Quick local start:
+
+```powershell
+# 1. Start infrastructure from WSL
+cd /mnt/d/JavaProjects/ai-faultlab/deploy
+docker compose up -d
+
+# 2. Start Java backend from PowerShell
+cd D:\JavaProjects\ai-faultlab\faultlab-backend
+mvn.cmd spring-boot:run
+
+# 3. Start Python AI Service from PowerShell
+cd D:\JavaProjects\ai-faultlab\faultlab-ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 4. Start frontend from PowerShell
+cd D:\JavaProjects\ai-faultlab\faultlab-frontend
+npm.cmd run dev
+```
+
+v0.12.0 focuses on Frontend Demo Polish: the dashboard, experiment overview, metrics summary, Trace view, rule diagnosis, AI report, and demo explanation flow are optimized for clearer walkthroughs. v0.11.0 was the last planned batch of new fault scenarios; later work should focus on presentation, documentation, and deployment hardening rather than adding more scenario types.
+
 AI FaultLab 是一个面向 Java 后端故障排查场景的故障演练与智能诊断平台。
 
 它不是简单的大模型套壳，而是通过真实故障演练、指标采集、Trace 追踪、规则诊断、Evidence Package 和 LLM 诊断报告生成，形成一条可解释、可降级的诊断链路。
