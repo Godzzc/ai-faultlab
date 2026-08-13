@@ -269,87 +269,144 @@ const scenarios = [
 ]
 
 const highlightedMetricNames = {
+  MQ_BACKLOG: [
+    'mq.publish.count',
+    'mq.consume.count',
+    'mq.backlog.count',
+    'mq.avg.consume.ms',
+  ],
+  THREAD_POOL_SATURATION: [
+    'thread.pool.active.count',
+    'thread.pool.queue.size',
+    'thread.pool.rejected.count',
+  ],
+  IDEMPOTENCY_CONFLICT: ['idempotency.conflict.count', 'idempotency.reuse.count'],
   CACHE_PENETRATION: [
-    'cache.request.count',
     'cache.miss.rate',
     'cache.db.query.count',
     'cache.invalid.key.count',
-    'cache.null.cache.write.count',
-    'cache.bloom.reject.count',
   ],
   CACHE_BREAKDOWN: [
-    'cache.hot.key.request.count',
     'cache.hot.key.miss.count',
-    'cache.db.query.count',
     'cache.rebuild.count',
-    'cache.lock.acquire.count',
-    'cache.lock.fail.count',
+    'cache.concurrent.rebuild.count',
   ],
   CACHE_AVALANCHE: [
-    'cache.key.count',
     'cache.expired.key.count',
-    'cache.unavailable.count',
-    'cache.miss.rate',
     'cache.db.query.count',
-    'cache.fallback.count',
     'cache.request.error.count',
   ],
   DB_SLOW_QUERY: [
-    'db.query.count',
     'db.slow.query.count',
-    'db.slow.query.rate',
     'db.avg.query.ms',
-    'db.max.query.ms',
     'db.full.scan.count',
     'db.scanned.rows',
   ],
   DB_LOCK_CONTENTION: [
-    'db.lock.request.count',
     'db.lock.wait.count',
-    'db.lock.wait.rate',
     'db.avg.lock.wait.ms',
-    'db.max.lock.wait.ms',
     'db.update.timeout.count',
-    'db.long.transaction.count',
   ],
   DB_CONNECTION_POOL_EXHAUSTION: [
-    'db.pool.max.size',
     'db.pool.active.count',
     'db.connection.acquire.timeout.count',
-    'db.connection.acquire.timeout.rate',
     'db.connection.acquire.avg.ms',
-    'db.connection.hold.avg.ms',
-    'api.error.count',
   ],
   DOWNSTREAM_TIMEOUT: [
-    'downstream.request.count',
     'downstream.timeout.count',
     'downstream.timeout.rate',
     'downstream.avg.latency.ms',
-    'downstream.max.latency.ms',
     'downstream.fallback.count',
-    'api.error.count',
   ],
   RETRY_STORM: [
-    'downstream.initial.request.count',
-    'downstream.total.call.count',
     'downstream.retry.count',
-    'downstream.retry.rate',
-    'downstream.retry.exhausted.count',
+    'downstream.total.call.count',
     'downstream.retry.amplification.factor',
-    'api.error.count',
   ],
   CIRCUIT_BREAKER_OPEN: [
-    'circuit.request.count',
-    'circuit.failure.count',
-    'circuit.failure.rate',
-    'circuit.slow.call.count',
     'circuit.open.count',
     'circuit.rejected.count',
     'circuit.fallback.count',
     'downstream.call.skipped.count',
   ],
 }
+
+const metricNameAliases = {
+  'mq.publish.count': ['publishCount'],
+  'mq.consume.count': ['consumeCount'],
+  'mq.backlog.count': ['backlogCount'],
+  'mq.avg.consume.ms': ['avgConsumeMs'],
+  'thread.pool.active.count': ['activeThreadCount'],
+  'thread.pool.queue.size': ['queueSize'],
+  'thread.pool.rejected.count': ['rejectedTaskCount'],
+  'idempotency.conflict.count': ['conflictCount', 'hashMismatchCount'],
+  'idempotency.reuse.count': ['duplicateCount'],
+}
+
+const demoExplainTips = {
+  MQ_BACKLOG: '先看 publish 和 consume 的差值，再看 backlog 是否累积，最后结合 Trace 判断消费阶段是否变慢。',
+  THREAD_POOL_SATURATION: '先看 active 线程和队列长度，再看 rejected count，最后用 Trace 判断请求是否卡在任务执行阶段。',
+  IDEMPOTENCY_CONFLICT: '先看 conflict 和 reuse 次数，再看规则诊断 reason，说明同一幂等键是否出现请求语义冲突。',
+  CACHE_PENETRATION: '先看 cache miss rate，再看 DB query 和 invalid key 数量，最后说明空值缓存或布隆过滤器的治理价值。',
+  CACHE_BREAKDOWN: '先看 hot key miss，再看 rebuild 和 concurrent rebuild，最后结合 Trace 判断是否重复打到 DB。',
+  CACHE_AVALANCHE: '先看 expired key 数量，再看 DB query 和 request error，说明大量 key 同时失效后的流量转移。',
+  DB_SLOW_QUERY: '先看 slow query count 和 avg query ms，再看 full scan 与 scanned rows，最后用 Trace 定位慢在 DB 查询阶段。',
+  DB_LOCK_CONTENTION: '先看 lock wait count，再看 avg lock wait 和 update timeout，最后结合 Trace 判断是否卡在行锁等待。',
+  DB_CONNECTION_POOL_EXHAUSTION: '先看连接获取超时，再看 active 连接数是否接近 max，最后结合 Trace 判断请求是否卡在 connection acquire 阶段。',
+  DOWNSTREAM_TIMEOUT: '先看 timeout count 和 timeout rate，再看 avg latency 与 fallback，最后用 Trace 说明下游调用阶段变慢。',
+  RETRY_STORM: '先看 total downstream calls 是否明显大于 initial request，再看 retry amplification factor，最后看是否出现 retry exhausted。',
+  CIRCUIT_BREAKER_OPEN: '先看 circuit open 和 rejected，再看 fallback 与 skipped call，说明熔断后请求如何快速失败或降级。',
+}
+
+const scenarioGroups = [
+  {
+    title: '基础后端稳定性',
+    description: '从消息堆积、线程池资源和幂等冲突切入，适合展示基础服务治理问题。',
+    scenarioCodes: ['MQ_BACKLOG', 'THREAD_POOL_SATURATION', 'IDEMPOTENCY_CONFLICT'],
+  },
+  {
+    title: '缓存故障',
+    description: '覆盖穿透、击穿、雪崩三类经典缓存异常，指标变化直观，适合演示排查闭环。',
+    scenarioCodes: ['CACHE_PENETRATION', 'CACHE_BREAKDOWN', 'CACHE_AVALANCHE'],
+  },
+  {
+    title: '数据库瓶颈',
+    description: '模拟慢 SQL、锁竞争和连接池耗尽，突出 DB 侧瓶颈对接口延迟和错误率的影响。',
+    scenarioCodes: ['DB_SLOW_QUERY', 'DB_LOCK_CONTENTION', 'DB_CONNECTION_POOL_EXHAUSTION'],
+  },
+  {
+    title: '下游调用韧性',
+    description: '展示超时、重试放大和熔断打开，适合说明服务依赖治理和降级策略。',
+    scenarioCodes: ['DOWNSTREAM_TIMEOUT', 'RETRY_STORM', 'CIRCUIT_BREAKER_OPEN'],
+  },
+]
+
+const demoPath = [
+  {
+    scenarioCode: 'CACHE_BREAKDOWN',
+    title: '热点 key 击穿',
+    description: '并发请求集中、缓存重建重复，适合讲解 hot key 过期后的 DB 突刺。',
+    metrics: 'cache.rebuild.count / cache.db.query.count',
+  },
+  {
+    scenarioCode: 'DB_CONNECTION_POOL_EXHAUSTION',
+    title: '连接池耗尽',
+    description: 'active 连接接近上限并出现 acquire timeout，适合说明慢查询如何占住连接。',
+    metrics: 'db.pool.active.count / db.connection.acquire.timeout.count',
+  },
+  {
+    scenarioCode: 'DOWNSTREAM_TIMEOUT',
+    title: '下游接口超时',
+    description: '下游延迟超过 timeoutMs，适合展示 fallback 对 API error 的影响。',
+    metrics: 'downstream.timeout.rate / downstream.fallback.count',
+  },
+  {
+    scenarioCode: 'RETRY_STORM',
+    title: '重试风暴',
+    description: '失败后调用量被重试放大，适合讲解 retry budget、jitter 和熔断边界。',
+    metrics: 'downstream.retry.amplification.factor / downstream.retry.count',
+  },
+]
 
 const selectedScenarioCode = ref(scenarios[0].code)
 const params = reactive({ ...scenarios[0].defaults })
@@ -368,6 +425,7 @@ const loading = reactive({
 })
 const errorMessage = ref('')
 const aiError = ref('')
+const copyMessage = ref('')
 
 const evaluationForm = reactive({
   retriever: 'all',
@@ -469,6 +527,8 @@ const traceRoots = computed(() => {
   return Array.isArray(traceTree.value?.roots) ? traceTree.value.roots : []
 })
 
+const traceSpanCount = computed(() => countTraceNodes(traceRoots.value))
+
 const evaluationSummaries = computed(() => {
   if (!evaluationResult.value) return []
   const summaries = evaluationResult.value.summaries ?? [evaluationResult.value]
@@ -477,18 +537,62 @@ const evaluationSummaries = computed(() => {
 
 const activeScenarioCode = computed(() => experiment.value?.scenarioCode || selectedScenarioCode.value)
 
+const overviewCards = computed(() => [
+  { label: 'experimentId', value: experiment.value?.experimentId || currentExperimentId.value, tone: 'strong' },
+  { label: 'scenarioCode', value: activeScenarioCode.value, tone: 'strong' },
+  { label: 'status', value: experiment.value?.status, tone: String(experiment.value?.status || '').toLowerCase() },
+  { label: 'startedAt', value: experiment.value?.startedAt ?? experiment.value?.startTime },
+  { label: 'finishedAt', value: experiment.value?.finishedAt ?? experiment.value?.endTime },
+  { label: 'traceId', value: experiment.value?.traceId },
+  { label: 'faultType', value: ruleDiagnosis.value?.faultType, tone: 'strong' },
+  { label: 'faultName', value: ruleDiagnosis.value?.faultName },
+])
+
+const overviewReason = computed(() => formatDisplayValue(ruleDiagnosis.value?.reason))
+
+const demoExplainTip = computed(
+  () => demoExplainTips[activeScenarioCode.value] || '先看关键指标，再看 Trace 定位阶段，最后用规则诊断和 AI 报告串起证据链。',
+)
+
 const highlightedMetrics = computed(() => {
   const names = highlightedMetricNames[activeScenarioCode.value]
   if (!names || metrics.value.length === 0) return []
   return names.map((name) => {
-    const metric = metrics.value.find((item) => item.metricName === name)
+    const metric = findMetricByName(name)
     return {
       name,
-      value: metric?.metricValue,
+      value: formatMetricValue(name, metric?.metricValue),
       unit: metric?.metricUnit,
+      missing: !metric,
     }
   })
 })
+
+const ruleEvidenceItems = computed(() => normalizeList(ruleDiagnosis.value?.evidence))
+const ruleSuggestionItems = computed(() => normalizeList(ruleDiagnosis.value?.suggestions))
+const aiPhenomenonItems = computed(() => normalizeList(aiDiagnosis.value?.phenomenon))
+const aiEvidenceItems = computed(() => normalizeList(aiDiagnosis.value?.evidence))
+const aiRootCauseItems = computed(() => normalizeList(aiDiagnosis.value?.rootCauses))
+const aiSuggestionItems = computed(() => normalizeList(aiDiagnosis.value?.suggestions))
+const aiRunbookReferenceItems = computed(() => normalizeList(aiDiagnosis.value?.runbookReferences))
+const aiReportText = computed(() => {
+  if (!aiDiagnosis.value) return ''
+  return JSON.stringify(aiDiagnosis.value, null, 2)
+})
+
+function findScenario(code) {
+  return scenarios.find((scenario) => scenario.code === code)
+}
+
+function findMetricByName(name) {
+  const aliases = metricNameAliases[name] ?? []
+  const names = [name, ...aliases]
+  return metrics.value.find((item) => names.includes(item.metricName))
+}
+
+function scenarioMetricPreview(code) {
+  return highlightedMetricNames[code]?.slice(0, 4).join(' / ') || '核心业务指标'
+}
 
 function selectScenario(code) {
   selectedScenarioCode.value = code
@@ -650,9 +754,23 @@ async function generateAiDiagnosis() {
     )
     await refreshExperimentData()
   } catch (error) {
-    aiError.value = error.message || '生成 AI 诊断报告失败'
+    aiError.value = friendlyAiError(error)
   } finally {
     loading.ai = false
+  }
+}
+
+async function copyAiReport() {
+  copyMessage.value = ''
+  if (!aiReportText.value || !navigator?.clipboard?.writeText) {
+    copyMessage.value = '当前浏览器不支持复制'
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(aiReportText.value)
+    copyMessage.value = '已复制报告 JSON'
+  } catch {
+    copyMessage.value = '复制失败'
   }
 }
 
@@ -716,6 +834,66 @@ function formatMetric(value) {
   return value.toFixed(4)
 }
 
+function formatMetricValue(name, rawValue) {
+  if (rawValue === null || rawValue === undefined || rawValue === '') return '-'
+  const numericValue = Number(rawValue)
+  if (!Number.isFinite(numericValue)) return rawValue
+  if (isRateMetric(name)) return numericValue.toFixed(4)
+  if (isMsMetric(name)) return `${stripTrailingZeros(numericValue.toFixed(2))} ms`
+  if (Number.isInteger(numericValue)) return String(numericValue)
+  return stripTrailingZeros(numericValue.toFixed(2))
+}
+
+function isRateMetric(name) {
+  return name.includes('.rate') || name.includes('Ratio') || name.includes('ratio')
+}
+
+function isMsMetric(name) {
+  return name.endsWith('.ms') || name.endsWith('Ms')
+}
+
+function stripTrailingZeros(value) {
+  return value.replace(/\.?0+$/, '')
+}
+
+function normalizeList(value) {
+  if (value === null || value === undefined || value === '') return []
+  if (Array.isArray(value)) return value.map(formatDisplayValue).filter((item) => item !== '-')
+  if (typeof value === 'object') {
+    return Object.entries(value).map(([key, item]) => `${key}: ${formatDisplayValue(item)}`)
+  }
+  return [String(value)]
+}
+
+function formatDisplayValue(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  if (Array.isArray(value)) return value.map(formatDisplayValue).join(', ')
+  if (typeof value === 'object') {
+    const docRef = [value.docId, value.section, value.title].filter(Boolean).join(' / ')
+    if (docRef) return docRef
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+function countTraceNodes(nodes) {
+  if (!Array.isArray(nodes)) return 0
+  return nodes.reduce((count, node) => count + 1 + countTraceNodes(node.children), 0)
+}
+
+function friendlyAiError(error) {
+  const message = error?.message || '生成 AI 诊断报告失败'
+  if (
+    message.includes('Failed to fetch') ||
+    message.includes('NetworkError') ||
+    message.includes('ECONNREFUSED') ||
+    message.includes('fetch')
+  ) {
+    return 'AI 诊断报告生成失败。请确认 Python AI Service 已启动，并检查 http://localhost:8000/ai/health。'
+  }
+  return `${message}。如果本地 AI Service 未启动，请检查 localhost:8000。`
+}
+
 function formatRefs(items) {
   if (!Array.isArray(items) || items.length === 0) return 'None'
   return items
@@ -731,14 +909,32 @@ function formatMetadata(metadata) {
 
 <template>
   <main class="dashboard">
-    <header class="topbar">
-      <div>
+    <header class="hero">
+      <div class="hero-content">
         <p class="eyebrow">Fault Simulation Dashboard</p>
-        <h1>AI FaultLab 故障演练与智能诊断平台</h1>
+        <h1>AI FaultLab</h1>
+        <p class="hero-subtitle">后端故障演练与 AI 诊断平台</p>
+        <p class="hero-copy">
+          用于模拟 MQ 堆积、线程池饱和、缓存异常、数据库瓶颈、下游超时等典型后端故障，并通过指标、Trace、规则诊断、Runbook RAG 和 AI 报告形成排查闭环。
+        </p>
+        <div class="capability-tags">
+          <span>Fault Simulation</span>
+          <span>Metrics</span>
+          <span>Trace</span>
+          <span>Rule Diagnosis</span>
+          <span>Runbook RAG</span>
+          <span>AI Report</span>
+        </div>
       </div>
-      <div class="status-strip">
-        <span>Backend</span>
-        <strong>/api</strong>
+      <div class="hero-status">
+        <div class="status-strip dark">
+          <span>Backend</span>
+          <strong>/api</strong>
+        </div>
+        <div class="status-strip dark">
+          <span>AI Service</span>
+          <strong>/ai</strong>
+        </div>
       </div>
     </header>
 
@@ -746,91 +942,367 @@ function formatMetadata(metadata) {
       {{ errorMessage }}
     </section>
 
-    <section class="layout">
-      <aside class="panel control-panel">
-        <div class="section-heading">
-          <h2>场景选择</h2>
-          <span>{{ selectedScenarioCode }}</span>
+    <section class="demo-path panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Demo Path</p>
+          <h2>推荐演示路径</h2>
         </div>
+        <span>4 steps</span>
+      </div>
+      <div class="demo-path-grid">
+        <button
+          v-for="(item, index) in demoPath"
+          :key="item.scenarioCode"
+          class="demo-step"
+          type="button"
+          @click="selectScenario(item.scenarioCode)"
+        >
+          <small>Step {{ index + 1 }} / {{ item.scenarioCode }}</small>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.description }}</span>
+          <em>{{ item.metrics }}</em>
+        </button>
+      </div>
+    </section>
 
-        <div class="scenario-list">
-          <button
-            v-for="scenario in scenarios"
-            :key="scenario.code"
-            class="scenario-button"
-            :class="{ active: selectedScenarioCode === scenario.code }"
-            type="button"
-            @click="selectScenario(scenario.code)"
-          >
-            <strong>{{ scenario.name }}</strong>
-            <small>{{ scenario.alias ? `${scenario.alias} / ${scenario.code}` : scenario.code }}</small>
-            <span>{{ scenario.description }}</span>
-          </button>
-        </div>
+    <section class="workbench">
+      <section class="scenario-workspace">
+        <section class="scenario-catalog panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Scenario Catalog</p>
+              <h2>故障场景选择</h2>
+            </div>
+            <span>{{ selectedScenarioCode }}</span>
+          </div>
 
-        <div class="section-heading compact">
-          <h2>参数配置</h2>
-        </div>
-        <div class="form-grid">
-          <label
-            v-for="field in selectedScenario.fields"
-            :key="field.key"
-            class="field"
-            :class="{ 'check-field form-check-field': field.type === 'boolean' }"
-          >
-            <template v-if="field.type === 'boolean'">
-              <input v-model="params[field.key]" type="checkbox" />
-              <span>{{ field.label }}</span>
-            </template>
-            <template v-else>
-              <span>{{ field.label }}</span>
-              <select v-if="field.type === 'select'" v-model="params[field.key]">
-                <option
-                  v-for="option in field.options"
-                  :key="option.value"
-                  :value="option.value"
+          <div class="scenario-groups">
+            <section v-for="group in scenarioGroups" :key="group.title" class="scenario-group">
+              <div class="scenario-group-heading">
+                <h3>{{ group.title }}</h3>
+                <p>{{ group.description }}</p>
+              </div>
+              <div class="scenario-card-grid">
+                <button
+                  v-for="code in group.scenarioCodes"
+                  :key="code"
+                  class="scenario-card"
+                  :class="{ active: selectedScenarioCode === code }"
+                  type="button"
+                  @click="selectScenario(code)"
                 >
-                  {{ option.label }}
-                </option>
-              </select>
-              <input
-                v-else
-                v-model="params[field.key]"
-                :type="field.type === 'text' ? 'text' : 'number'"
-                :min="field.min"
-                :max="field.max"
-                :step="field.step ?? 1"
-              />
-            </template>
+                  <span class="selected-dot">{{ selectedScenarioCode === code ? 'Selected' : 'Ready' }}</span>
+                  <strong>{{ findScenario(code)?.name }}</strong>
+                  <small>{{ code }}</small>
+                  <p>{{ findScenario(code)?.description }}</p>
+                  <em>{{ scenarioMetricPreview(code) }}</em>
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <aside class="panel control-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Experiment Setup</p>
+              <h2>参数配置</h2>
+            </div>
+            <span>{{ selectedScenarioCode }}</span>
+          </div>
+
+          <div class="selected-scenario-summary">
+            <strong>{{ selectedScenario.name }}</strong>
+            <span>{{ selectedScenario.alias ? `${selectedScenario.alias} / ${selectedScenario.code}` : selectedScenario.code }}</span>
+            <p>{{ selectedScenario.description }}</p>
+          </div>
+
+          <div class="form-grid">
+            <label
+              v-for="field in selectedScenario.fields"
+              :key="field.key"
+              class="field"
+              :class="{ 'check-field form-check-field': field.type === 'boolean' }"
+            >
+              <template v-if="field.type === 'boolean'">
+                <input v-model="params[field.key]" type="checkbox" />
+                <span>{{ field.label }}</span>
+              </template>
+              <template v-else>
+                <span>{{ field.label }}</span>
+                <select v-if="field.type === 'select'" v-model="params[field.key]">
+                  <option
+                    v-for="option in field.options"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <input
+                  v-else
+                  v-model="params[field.key]"
+                  :type="field.type === 'text' ? 'text' : 'number'"
+                  :min="field.min"
+                  :max="field.max"
+                  :step="field.step ?? 1"
+                />
+              </template>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>当前 experimentId</span>
+            <input v-model.trim="currentExperimentId" placeholder="启动后自动填入，也可手动输入" />
           </label>
-        </div>
 
-        <div v-if="selectedScenario.alias" class="scenario-note">
-          {{ selectedScenario.description }}
-        </div>
-
-        <label class="field">
-          <span>当前 experimentId</span>
-          <input v-model.trim="currentExperimentId" placeholder="启动后自动填入，也可手动输入" />
-        </label>
-
-        <div class="actions">
-          <button type="button" :disabled="loading.start" @click="startExperiment">
-            {{ loading.start ? '启动中...' : '开始演练' }}
-          </button>
-          <button type="button" :disabled="loading.diagnosis" @click="runRuleDiagnosis">
-            {{ loading.diagnosis ? '诊断中...' : '执行规则诊断' }}
-          </button>
-          <button type="button" :disabled="loading.ai" @click="generateAiDiagnosis">
-            {{ loading.ai ? 'AI 诊断生成中...' : '生成 AI 诊断报告' }}
-          </button>
-          <button type="button" :disabled="loading.refresh" @click="refreshExperimentData">
-            {{ loading.refresh ? '刷新中...' : '刷新实验数据' }}
-          </button>
-        </div>
-      </aside>
+          <div class="actions">
+            <button type="button" :disabled="loading.start" @click="startExperiment">
+              {{ loading.start ? '启动中...' : '开始演练' }}
+            </button>
+            <button type="button" :disabled="loading.diagnosis" @click="runRuleDiagnosis">
+              {{ loading.diagnosis ? '诊断中...' : '执行规则诊断' }}
+            </button>
+            <button type="button" :disabled="loading.ai" @click="generateAiDiagnosis">
+              {{ loading.ai ? 'AI 诊断生成中...' : '生成 AI 诊断报告' }}
+            </button>
+            <button type="button" :disabled="loading.refresh" @click="refreshExperimentData">
+              {{ loading.refresh ? '刷新中...' : '刷新实验数据' }}
+            </button>
+          </div>
+        </aside>
+      </section>
 
       <section class="content-stack">
+        <section class="panel overview-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Experiment Overview</p>
+              <h2>实验结果概览</h2>
+            </div>
+            <span>{{ formatDisplayValue(experiment?.status) }}</span>
+          </div>
+          <div v-if="experiment" class="overview-stack">
+            <div class="overview-grid">
+              <article
+                v-for="card in overviewCards"
+                :key="card.label"
+                class="overview-card"
+                :class="card.tone"
+              >
+                <span>{{ card.label }}</span>
+                <strong>{{ formatDisplayValue(card.value) }}</strong>
+              </article>
+            </div>
+            <div class="overview-reason">
+              <span>diagnosis reason</span>
+              <strong>{{ overviewReason }}</strong>
+            </div>
+            <div class="demo-explain">
+              <span>如何讲解这个结果</span>
+              <p>{{ demoExplainTip }}</p>
+            </div>
+          </div>
+          <p v-else class="empty">暂无数据</p>
+        </section>
+
+        <section class="panel metrics-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Metrics Summary</p>
+              <h2>指标摘要与完整表格</h2>
+            </div>
+            <span>{{ metrics.length }} items</span>
+          </div>
+          <p class="section-note">优先展示当前场景最适合 Demo 讲解的关键指标，完整 Metrics 表格仍保留在下方。</p>
+          <div v-if="highlightedMetrics.length" class="highlight-metric-grid">
+            <article
+              v-for="metric in highlightedMetrics"
+              :key="metric.name"
+              class="highlight-metric-card"
+              :class="{ missing: metric.missing }"
+            >
+              <span>{{ metric.name }}</span>
+              <strong>{{ metric.value }}</strong>
+              <small>{{ metric.missing ? 'missing' : formatDisplayValue(metric.unit) }}</small>
+            </article>
+          </div>
+          <div class="table-wrap">
+            <table v-if="metrics.length">
+              <thead>
+                <tr>
+                  <th>metricName</th>
+                  <th>metricValue</th>
+                  <th>metricUnit</th>
+                  <th>component</th>
+                  <th>createdAt</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(metric, index) in metrics" :key="`${metric.metricName}-${index}`">
+                  <td>{{ formatDisplayValue(metric.metricName) }}</td>
+                  <td>{{ formatMetricValue(metric.metricName || '', metric.metricValue) }}</td>
+                  <td>{{ formatDisplayValue(metric.metricUnit) }}</td>
+                  <td>{{ formatDisplayValue(metric.component) }}</td>
+                  <td>{{ formatDisplayValue(metric.createdAt) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-else class="empty">暂无数据</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Trace Timeline</p>
+              <h2>Trace 调用链</h2>
+            </div>
+            <span>{{ traceRoots.length }} root / {{ traceSpanCount }} spans</span>
+          </div>
+          <p class="section-note">Trace 用于观察故障发生在哪个阶段，重点看 ERROR span 和耗时较高的 durationMs。</p>
+          <div v-if="traceRoots.length" class="trace-tree">
+            <TraceNode v-for="node in traceRoots" :key="node.spanId || node.operationName" :node="node" />
+          </div>
+          <p v-else class="empty">暂无 Trace 数据</p>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Rule Diagnosis</p>
+              <h2>规则诊断结果</h2>
+            </div>
+            <span>{{ formatDisplayValue(ruleDiagnosis?.confidence) }}</span>
+          </div>
+          <p class="section-note">
+            规则诊断基于结构化指标和阈值判断，用于给 AI 报告提供稳定证据。
+          </p>
+          <div v-if="ruleDiagnosis" class="diagnosis">
+            <div class="info-grid">
+              <div>
+                <span>faultType</span>
+                <strong>{{ formatDisplayValue(ruleDiagnosis.faultType) }}</strong>
+              </div>
+              <div>
+                <span>faultName</span>
+                <strong>{{ formatDisplayValue(ruleDiagnosis.faultName) }}</strong>
+              </div>
+              <div>
+                <span>confidence</span>
+                <strong>{{ formatDisplayValue(ruleDiagnosis.confidence) }}</strong>
+              </div>
+              <div>
+                <span>matched</span>
+                <strong>{{ formatBoolean(ruleDiagnosis.matched) }}</strong>
+              </div>
+            </div>
+            <p class="reason">{{ formatDisplayValue(ruleDiagnosis.reason) }}</p>
+            <div class="list-columns">
+              <div>
+                <h3>Evidence</h3>
+                <ul v-if="ruleEvidenceItems.length">
+                  <li v-for="(item, index) in ruleEvidenceItems" :key="`${item}-${index}`">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Suggestions</h3>
+                <ul v-if="ruleSuggestionItems.length">
+                  <li v-for="(item, index) in ruleSuggestionItems" :key="`${item}-${index}`">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+            </div>
+          </div>
+          <p v-else class="empty">暂无数据</p>
+        </section>
+
+        <section class="panel ai-panel">
+          <div class="section-heading ai-heading">
+            <div>
+              <p class="eyebrow">AI Report</p>
+              <h2>AI 诊断报告</h2>
+            </div>
+            <div class="ai-actions">
+              <button type="button" :disabled="loading.ai" @click="generateAiDiagnosis">
+                {{ loading.ai ? '正在生成 AI 报告...' : '生成 AI 报告' }}
+              </button>
+              <button type="button" :disabled="!aiDiagnosis" @click="copyAiReport">
+                复制报告
+              </button>
+            </div>
+          </div>
+          <p v-if="loading.ai" class="loading-note">AI Service 正在基于 Metrics、Trace 和规则诊断生成报告...</p>
+          <section v-if="aiError" class="alert ai-alert">
+            {{ aiError }}
+          </section>
+          <p v-if="copyMessage" class="copy-note">{{ copyMessage }}</p>
+          <div v-if="aiDiagnosis" class="diagnosis ai-diagnosis">
+            <div v-if="aiDiagnosis.fallback === true" class="fallback-badge">
+              当前为降级报告
+            </div>
+            <div class="info-grid">
+              <div>
+                <span>faultType</span>
+                <strong>{{ formatDisplayValue(aiDiagnosis.faultType) }}</strong>
+              </div>
+              <div>
+                <span>faultName</span>
+                <strong>{{ formatDisplayValue(aiDiagnosis.faultName) }}</strong>
+              </div>
+              <div>
+                <span>confidence</span>
+                <strong>{{ formatDisplayValue(aiDiagnosis.confidence) }}</strong>
+              </div>
+              <div>
+                <span>fallback</span>
+                <strong>{{ formatBoolean(aiDiagnosis.fallback) }}</strong>
+              </div>
+            </div>
+            <p class="reason ai-summary">{{ formatDisplayValue(aiDiagnosis.summary) }}</p>
+            <div class="list-columns ai-list-grid">
+              <div>
+                <h3>Phenomenon</h3>
+                <ul v-if="aiPhenomenonItems.length">
+                  <li v-for="(item, index) in aiPhenomenonItems" :key="`${item}-${index}`">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Evidence</h3>
+                <ul v-if="aiEvidenceItems.length">
+                  <li v-for="(item, index) in aiEvidenceItems" :key="`${item}-${index}`">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Root Causes</h3>
+                <ul v-if="aiRootCauseItems.length">
+                  <li v-for="(item, index) in aiRootCauseItems" :key="`${item}-${index}`">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Suggestions</h3>
+                <ul v-if="aiSuggestionItems.length">
+                  <li v-for="(item, index) in aiSuggestionItems" :key="`${item}-${index}`">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+              <div>
+                <h3>Runbook References</h3>
+                <ul v-if="aiRunbookReferenceItems.length">
+                  <li v-for="(item, index) in aiRunbookReferenceItems" :key="`${item}-${index}`">{{ item }}</li>
+                </ul>
+                <p v-else class="empty small">暂无数据</p>
+              </div>
+            </div>
+          </div>
+          <p v-else-if="!aiError" class="empty">暂无 AI 诊断报告</p>
+        </section>
+
         <section class="panel">
           <div class="section-heading">
             <h2>实验信息</h2>
