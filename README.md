@@ -12,6 +12,7 @@ Current demo scope:
 Demo entry:
 
 - [AI FaultLab Demo Guide](docs/demo-guide.md)
+- [Screenshots Guide](docs/screenshots.md)
 - Local frontend: `http://localhost:5173`
 
 Quick local start:
