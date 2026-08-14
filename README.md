@@ -203,7 +203,9 @@ ai-faultlab
 
 - [Demo Guide](docs/demo-guide.md)
 - [Screenshots Guide](docs/screenshots.md)
+- [Environment Variables Guide](docs/env-guide.md)
 - [Local Dev Guide](docs/local-dev.md)
+- [Release Checklist](docs/release-checklist.md)
 - [Architecture](docs/architecture.md)
 - [API Contract](docs/api-contract.md)
 - [RAG Architecture](docs/rag-architecture.md)
