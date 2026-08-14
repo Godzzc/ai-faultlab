@@ -1,28 +1,51 @@
 # Local Development
 
-本文档记录 AI FaultLab v0.3.0 的本地开发启动和排查命令。完整演示流程见 [demo-guide.md](./demo-guide.md)。
+本文档说明 AI FaultLab 的本地启动流程、健康检查和常见本地验证命令。完整演示路径见 [Demo Guide](./demo-guide.md)，环境变量说明见 [Environment Variables Guide](./env-guide.md)。
 
-## Docker Compose
+当前项目不提供公网在线 Demo。本地开发和截图采集都应基于完整本地运行环境。
 
-启动基础组件：
+## 1. 启动顺序
+
+推荐按以下顺序启动：
+
+1. 基础设施：MySQL / Redis / RabbitMQ / Milvus
+2. Java Backend
+3. Python AI Service
+4. Frontend
+
+## 2. 启动基础设施
+
+如果在 WSL 中运行 Docker Compose：
 
 ```bash
-cd deploy
+cd /mnt/d/JavaProjects/ai-faultlab/deploy
 docker compose up -d
 docker compose ps
 ```
 
-正常应启动：
+如果在 PowerShell 中运行 Docker Compose：
+
+```powershell
+cd D:\JavaProjects\ai-faultlab\deploy
+docker compose up -d
+docker compose ps
+```
+
+正常应看到以下核心容器：
 
 - `faultlab-mysql`
 - `faultlab-redis`
 - `faultlab-rabbitmq`
+- `faultlab-milvus-etcd`
+- `faultlab-milvus-minio`
+- `faultlab-milvus-standalone`
 
 查看日志：
 
 ```bash
 docker compose logs -f mysql
 docker compose logs -f rabbitmq
+docker compose logs -f milvus-standalone
 ```
 
 停止容器但保留数据卷：
@@ -37,37 +60,16 @@ docker compose down
 docker compose down -v
 ```
 
-区别：
+`docker compose down -v` 会删除 MySQL / Redis / RabbitMQ / Milvus 数据卷。只有在需要重建本地数据时再使用。
 
-- `docker compose down`：删除容器和网络，保留 MySQL / Redis / RabbitMQ 数据卷。
-- `docker compose down -v`：同时删除数据卷。下次启动时 MySQL 会重新执行初始化脚本，适合 schema 变更后重建本地库。
+## 3. 启动 Java Backend
 
-## Java Backend
+PowerShell：
 
-推荐使用 IDEA 启动：
-
-```text
-FaultLabBackendApplication
+```powershell
+cd D:\JavaProjects\ai-faultlab\faultlab-backend
+mvn.cmd spring-boot:run
 ```
-
-IDEA Environment variables 示例：
-
-```text
-MYSQL_HOST=localhost;MYSQL_PORT=3306;MYSQL_DATABASE=faultlab;MYSQL_USERNAME=faultlab;MYSQL_PASSWORD=faultlab123456;RABBITMQ_HOST=localhost;RABBITMQ_PORT=5672;RABBITMQ_USERNAME=faultlab;RABBITMQ_PASSWORD=faultlab123456;REDIS_HOST=localhost;REDIS_PORT=6379
-```
-
-AI Service 相关配置在 `faultlab-backend/src/main/resources/application.yml` 中已有默认值：
-
-```yaml
-faultlab:
-  ai-service:
-    base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
-    diagnosis-path: ${AI_SERVICE_DIAGNOSIS_PATH:/ai/diagnosis/generate}
-    connect-timeout-ms: ${AI_SERVICE_CONNECT_TIMEOUT_MS:3000}
-    read-timeout-ms: ${AI_SERVICE_READ_TIMEOUT_MS:120000}
-```
-
-`AI_SERVICE_READ_TIMEOUT_MS` 默认建议为 `120000`，避免本地 LLM 调用较慢时 Java 过早超时。
 
 健康检查：
 
@@ -75,38 +77,24 @@ faultlab:
 GET http://localhost:8080/api/health
 ```
 
-命令行启动：
+本地默认配置来自 `faultlab-backend/src/main/resources/application.yml`。如需覆盖 MySQL、Redis、RabbitMQ 或 AI Service 地址，优先使用环境变量，详情见 [Environment Variables Guide](./env-guide.md)。
 
-```bash
-cd faultlab-backend
-mvn spring-boot:run
-```
-
-## Python AI Service
-
-只需要配置 `DASHSCOPE_API_KEY`：
-
-```powershell
-setx DASHSCOPE_API_KEY "你的真实百炼APIKey"
-```
-
-重新打开 PowerShell 后启动：
-
-```powershell
-cd faultlab-ai-service
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+## 4. 启动 Python AI Service
 
 如果还没有虚拟环境：
 
 ```powershell
-cd faultlab-ai-service
+cd D:\JavaProjects\ai-faultlab\faultlab-ai-service
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-`.venv` 不要提交到 Git。
+启动服务：
+
+```powershell
+cd D:\JavaProjects\ai-faultlab\faultlab-ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
 健康检查：
 
@@ -114,31 +102,23 @@ python -m venv .venv
 GET http://localhost:8000/ai/health
 ```
 
-未配置 `DASHSCOPE_API_KEY` 时，AI Service 会自动返回 fallback 报告。
+如果需要真实 AI Report，需要在本地配置 `DASHSCOPE_API_KEY`。不要提交真实 key。
 
-## RabbitMQ Management
+PowerShell 示例：
 
-管理台地址：
-
-```text
-http://localhost:15672
+```powershell
+$env:DASHSCOPE_API_KEY="your_dashscope_api_key_here"
 ```
 
-默认本地账号密码通常来自 `deploy/.env.example`：
+未配置 `DASHSCOPE_API_KEY` 时，AI Service 可以启动；诊断链路会在模型不可用时使用 fallback 报告。
 
-```text
-faultlab / faultlab123456
-```
+## 5. 启动 Frontend
 
-如果复制后的 `deploy/.env` 修改过账号密码，Java Backend 环境变量也需要同步。
+PowerShell：
 
-## Frontend
-
-启动前端：
-
-```bash
-cd faultlab-frontend
-npm install
+```powershell
+cd D:\JavaProjects\ai-faultlab\faultlab-frontend
+npm.cmd install
 npm.cmd run dev
 ```
 
@@ -148,64 +128,38 @@ npm.cmd run dev
 http://localhost:5173
 ```
 
-Vite 代理：
+Vite 本地代理配置位于 `faultlab-frontend/vite.config.js`：
 
 ```text
 /api -> http://localhost:8080
+/ai  -> http://localhost:8000
 ```
 
-构建验证：
+## 6. RabbitMQ Management
 
-```bash
-npm.cmd run build
-```
-
-## Milvus Runbook Index
-
-Docker Compose starts Milvus standalone together with MySQL, Redis, and RabbitMQ:
-
-- `faultlab-milvus-etcd`
-- `faultlab-milvus-minio`
-- `faultlab-milvus-standalone`
-
-Start and verify:
-
-```bash
-cd deploy
-docker compose up -d
-docker compose ps
-```
-
-Milvus listens on:
+本地管理台：
 
 ```text
-localhost:19530
+http://localhost:15672
 ```
 
-After setting `DASHSCOPE_API_KEY` and starting the Python AI Service, build the Runbook vector index:
+默认本地账号密码来自 `deploy/.env.example` 或 Docker Compose 默认值：
+
+```text
+faultlab / faultlab123456
+```
+
+这些默认值仅用于本地开发。
+
+## 7. Runbook Index
+
+Milvus 启动后，可以构建 Runbook 向量索引：
 
 ```text
 POST http://localhost:8000/ai/runbooks/index
 ```
 
-Expected response:
-
-```json
-{
-  "status": "success",
-  "collectionName": "faultlab_runbook_chunks",
-  "indexedCount": 12,
-  "skippedCount": 0,
-  "deletedCount": 0,
-  "failedCount": 0,
-  "indexedDocuments": ["mq-backlog"],
-  "skippedDocuments": [],
-  "failedDocuments": [],
-  "forceRebuild": false
-}
-```
-
-The request body is optional:
+请求体可选：
 
 ```json
 {
@@ -213,413 +167,56 @@ The request body is optional:
 }
 ```
 
-Index governance stores runtime state in `faultlab-ai-service/data/runbook_index_state.json`. The service calculates each Markdown file content hash, skips unchanged documents, deletes old Milvus chunks when a document changes, and removes old chunks when a Runbook Markdown file is deleted. Use `{"forceRebuild": true}` to force a full rebuild.
-
-Diagnosis retrieval uses Hybrid Retrieval Basic. `RetrievalService` calls `HybridRunbookRetriever`, which runs Milvus vector retrieval and BM25-like local Markdown retrieval, fuses both result lists with Reciprocal Rank Fusion, and applies a lightweight rule-based rerank before returning the final topK Runbook chunks.
-
-If Milvus is unavailable, the collection does not exist, or embedding fails, Hybrid retrieval still returns BM25-like keyword results. If the Hybrid retriever itself fails, `RetrievalService` falls back to `KeywordRunbookRetriever`.
-
-Common issues:
-
-- Milvus not started: run `docker compose ps` and check `docker compose logs -f milvus-standalone`.
-- Collection missing: call `POST /ai/runbooks/index`.
-- Unchanged documents skipped: expected when content hash matches the state file.
-- Force full rebuild: call `POST /ai/runbooks/index` with `{"forceRebuild": true}`.
-- Embedding timeout: verify `DASHSCOPE_API_KEY` and network access to Bailian.
-- `DASHSCOPE_API_KEY` missing: indexing fails and LLM diagnosis will use fallback.
-- Vector dimension mismatch: recreate the Milvus collection after changing `embedding_dimension`.
-- Hybrid logs should include vector result count, BM25 result count, fused result count, and final result count.
-
-Current limits: no MySQL index state table, no management UI, no scheduled scan, no async indexing queue, no rollback, and no dedicated rerank model. The keyword scoring is BM25-like and dependency-free, not a full search-engine BM25 implementation. The reranker is rule-based and does not call a rerank model.
-
-Do not commit `faultlab-ai-service/data/runbook_index_state.json`; it is generated at runtime.
-
-## RAG Retrieval Evaluation
-
-The Python AI Service includes a retrieval-only evaluation runner for Runbook RAG. It does not call the LLM, Java backend, or frontend.
-
-Dataset:
-
-```text
-faultlab-ai-service/evaluation/rag_eval_cases.json
-```
-
-Metrics:
-
-- Hit@K
-- Recall@K
-- MRR
-
-Start the AI Service:
-
-```powershell
-cd faultlab-ai-service
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Call the evaluation endpoint:
-
-```text
-POST http://localhost:8000/ai/runbooks/evaluate
-body: {"retriever": "bm25", "topK": 3}
-```
-
-Other supported request bodies:
-
-```text
-{"retriever": "hybrid", "topK": 3}
-{"retriever": "all", "topK": 3}
-{"retriever": "all", "topK": 3, "report": true}
-```
-
-Run from the command line:
-
-```powershell
-cd faultlab-ai-service
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
-.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
-.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
-```
-
-Markdown reports include Overall Metrics, Retriever Comparison, Metrics By Fault Type, Case Details, Miss Cases, and Optimization Suggestions. API report responses keep `application/json` and add `markdownReport`.
-
-BM25 evaluation uses local Markdown only. Hybrid and Milvus evaluation need Milvus and embedding dependencies; when a retriever fails in `all`, the report includes that retriever's error and continues with the rest. Report suggestions are rule-based and do not call the LLM. Current limits: no nDCG and no visualization UI.
-
-### RAG Evaluation Regression Gate
-
-Run the BM25-only regression gate locally:
-
-```powershell
-cd faultlab-ai-service
-.\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
-```
-
-Thresholds are configured in:
-
-```text
-faultlab-ai-service/evaluation/rag_eval_thresholds.json
-```
-
-The current thresholds are the v0.5 baseline and are intentionally modest. The command prints `hitAtK`, `recallAtK`, `mrr`, thresholds, `passed`, and `failedMetrics`, then exits with `0` on pass or `1` on failure.
-
-GitHub Actions runs only the BM25 gate by default. It does not start Milvus and does not require `DASHSCOPE_API_KEY`. Hybrid and Milvus evaluation can still be run locally when Milvus and embeddings are available; a future integration environment can add a required hybrid gate.
-
-If the gate fails, check Runbook keyword coverage, section title changes, query construction fields, BM25-like scoring changes, and accidental topK/RRF/rerank parameter changes.
-
-### RAG Retrieval Debug
-
-Run debug for one evaluation case:
-
-```powershell
-cd faultlab-ai-service
-.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
-.\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3 --no-content
-```
-
-The Debug API is:
-
-```text
-POST /ai/runbooks/retrieve/debug
-```
-
-The output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to inspect miss cases, query construction, Milvus vs BM25-like recall, RRF fusion, and rerank ordering changes.
-
-This path does not call the LLM and has no frontend UI or visualization chart. BM25 debug works without Milvus. Vector debug requires Milvus and embeddings; when Milvus is unavailable, the response should still include BM25 results and a warning.
-
-### Runbook Management and Index Tasks
-
-Runbook management stays local Markdown based:
-
-```text
-GET http://localhost:8000/ai/runbooks
-GET http://localhost:8000/ai/runbooks/mq-backlog
-POST http://localhost:8000/ai/runbooks
-PUT http://localhost:8000/ai/runbooks/mq-backlog
-DELETE http://localhost:8000/ai/runbooks/mq-backlog
-```
-
-Index tasks:
-
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index-tasks" -ContentType "application/json" -Body '{"forceRebuild":false}'
-Invoke-RestMethod -Method Get -Uri "http://localhost:8000/ai/runbooks/index-tasks"
-```
-
-The old endpoint is still valid:
-
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index" -ContentType "application/json" -Body '{"forceRebuild":false}'
-```
-
-Task records are stored in `faultlab-ai-service/data/runbook_index_tasks.json` and ignored by Git. This is not MySQL-backed Runbook management, not an async task queue, and not a permission, audit, or approval workflow.
-
-## RAG v0.5 Demo
-
-完整演示文档见 [RAG v0.5 Demo Guide](./rag-v0.5-demo-guide.md)。架构说明见 [RAG Architecture](./rag-architecture.md)，评测说明见 [RAG Evaluation Guide](./rag-evaluation-guide.md)，面试复盘见 [RAG Interview Guide](./rag-interview-guide.md)。
-
-本地演示建议顺序：
-
-1. 启动 Docker Compose，确认 MySQL、Redis、RabbitMQ、Milvus 均启动。
-2. 启动 Java Backend、Python AI Service 和 Vue Frontend。
-3. 配置 `DASHSCOPE_API_KEY`。
-4. 调用 `/ai/runbooks/index` 构建 Runbook 索引。
-5. 再次调用 `/ai/runbooks/index`，确认 `indexedCount=0`、`skippedCount>0`。
-6. 使用 `{"forceRebuild":true}` 演示强制重建。
-7. 在前端运行 `MQ_BACKLOG` 实验，执行规则诊断并生成 AI 诊断报告。
-8. 查看 AI Report 中的 `runbookReferences`。
-9. 运行 retrieval evaluation 并输出 Markdown report。
-10. 停止 `milvus-standalone`，再次诊断，验证 keyword-only fallback 不让诊断接口直接 500。
-
-索引命令：
-
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index" -ContentType "application/json" -Body '{}'
-Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/index" -ContentType "application/json" -Body '{"forceRebuild":true}'
-```
-
-评测命令：
-
-```powershell
-cd faultlab-ai-service
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report --output evaluation/reports/rag_eval_report.md
-```
-
-API 评测并返回 Markdown report：
-
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/evaluate" -ContentType "application/json" -Body '{"retriever":"all","topK":3,"report":true}'
-```
-
-Milvus fallback 演示：
-
-```powershell
-cd deploy
-docker compose stop milvus-standalone
-# 再次调用诊断，观察 AI Service 日志中的 vector retrieval failure 和 BM25-like fallback。
-docker compose start milvus-standalone
-```
-
-当前是 v0.5 RAG Demo，不是生产级平台。演示时不要把 BM25-like 描述成标准 BM25，不要把 lightweight rerank 描述成真实 rerank 模型，也不要说已经具备 Runbook 管理后台、可视化评测 UI 或 hybrid required regression gate。
-
-## Notes
-
-- 不要提交 `deploy/.env`、真实 API Key、`.env`、`.venv`。
-- MySQL 初始化脚本来自 `faultlab-backend/src/main/resources/db/schema.sql`。
-- 修改 schema 后，如果已有 MySQL volume，需要执行 `docker compose down -v` 后重新启动才会重建表结构。
-- Python AI Service 的模型、超时和路由配置目前在 `faultlab-ai-service/app/config.py` 中维护。
-
-## Cache Failure Scenario Local Checks
-
-The v0.9.0 cache drills run through the same Java backend API:
-
-```text
-POST http://localhost:8080/api/experiments/start
-```
-
-Cache penetration:
+强制重建：
 
 ```json
 {
-  "scenarioCode": "CACHE_PENETRATION",
-  "params": {
-    "requestCount": 100,
-    "invalidKeyRatio": 0.8,
-    "enableNullCache": false,
-    "enableBloomFilter": false
-  }
+  "forceRebuild": true
 }
 ```
 
-Cache breakdown:
-
-```json
-{
-  "scenarioCode": "CACHE_BREAKDOWN",
-  "params": {
-    "requestCount": 100,
-    "hotKey": "hot:item:1",
-    "concurrency": 20,
-    "enableMutex": false,
-    "enableLogicalExpire": false
-  }
-}
-```
-
-Cache avalanche:
-
-```json
-{
-  "scenarioCode": "CACHE_AVALANCHE",
-  "params": {
-    "keyCount": 50,
-    "requestCount": 200,
-    "sameTtl": true,
-    "enableTtlJitter": false,
-    "simulateRedisDown": false,
-    "enableFallback": false
-  }
-}
-```
-
-After starting an experiment, use the existing endpoints to inspect output:
+索引状态文件是运行时文件，不应提交：
 
 ```text
-GET  /api/experiments/{experimentId}/metrics
-GET  /api/traces/{traceId}
-POST /api/diagnosis/{experimentId}/rule
-POST /api/diagnosis/{experimentId}/ai/generate
+faultlab-ai-service/data/runbook_index_state.json
+faultlab-ai-service/data/runbook_index_tasks.json
 ```
 
-The scenarios use deterministic in-process simulation for Redis/DB/cache fallback behavior. They do not require new infrastructure beyond the normal local stack and do not call `flushAll`.
+## 8. RAG Retrieval Evaluation
 
-## Database Bottleneck Scenario Local Checks
-
-The v0.10.0 database bottleneck drills also run through the same Java backend API:
-
-```text
-POST http://localhost:8080/api/experiments/start
-```
-
-Slow SQL / full scan:
-
-```json
-{
-  "scenarioCode": "DB_SLOW_QUERY",
-  "params": {
-    "requestCount": 100,
-    "queryMode": "FULL_SCAN",
-    "tableSize": 100000,
-    "scannedRows": 80000,
-    "dbDelayMs": 80,
-    "enableIndexOptimization": false
-  }
-}
-```
-
-Lock contention:
-
-```json
-{
-  "scenarioCode": "DB_LOCK_CONTENTION",
-  "params": {
-    "requestCount": 50,
-    "concurrency": 10,
-    "targetRowId": "order:1",
-    "lockHoldMs": 200,
-    "lockWaitTimeoutMs": 100,
-    "enableShortTransaction": false
-  }
-}
-```
-
-Connection pool exhaustion:
-
-```json
-{
-  "scenarioCode": "DB_CONNECTION_POOL_EXHAUSTION",
-  "params": {
-    "requestCount": 100,
-    "concurrency": 30,
-    "maxPoolSize": 10,
-    "queryDelayMs": 200,
-    "connectionAcquireTimeoutMs": 50,
-    "enableFastRelease": false
-  }
-}
-```
-
-These scenarios are deterministic local simulations. They do not create large MySQL tables, open real long transactions, modify HikariCP settings, exhaust real database connections, or run load tests.
-
-## Downstream Resilience Scenario Local Checks
-
-The v0.11.0 downstream resilience drills also run through the same Java backend API:
-
-```text
-POST http://localhost:8080/api/experiments/start
-```
-
-Downstream timeout:
-
-```json
-{
-  "scenarioCode": "DOWNSTREAM_TIMEOUT",
-  "params": {
-    "requestCount": 100,
-    "concurrency": 20,
-    "downstreamDelayMs": 300,
-    "timeoutMs": 100,
-    "timeoutRatio": 0.8,
-    "enableFallback": false,
-    "fallbackDelayMs": 10
-  }
-}
-```
-
-Retry storm:
-
-```json
-{
-  "scenarioCode": "RETRY_STORM",
-  "params": {
-    "requestCount": 100,
-    "concurrency": 20,
-    "failureRatio": 0.7,
-    "maxRetries": 3,
-    "retryBackoffMs": 20,
-    "enableRetryLimit": false,
-    "enableJitter": false
-  }
-}
-```
-
-Circuit breaker open:
-
-```json
-{
-  "scenarioCode": "CIRCUIT_BREAKER_OPEN",
-  "params": {
-    "requestCount": 100,
-    "failureRatio": 0.8,
-    "slowCallRatio": 0.5,
-    "slidingWindowSize": 20,
-    "failureRateThreshold": 0.5,
-    "slowCallThresholdMs": 200,
-    "openDurationMs": 500,
-    "enableFallback": true
-  }
-}
-```
-
-These scenarios are deterministic local simulations. They do not start another service, make real HTTP calls, add Resilience4j/Sentinel/OpenFeign, or run load tests.
-
-## Cache, Database, and Downstream Runbook Evaluation Local Checks
-
-The Python AI service includes v0.9.0 cache Runbooks, v0.10.0 database Runbooks, and v0.11.0 downstream Runbooks with retrieval evaluation cases:
-
-- `CACHE_PENETRATION`
-- `CACHE_BREAKDOWN`
-- `CACHE_AVALANCHE`
-- `DB_SLOW_QUERY`
-- `DB_LOCK_CONTENTION`
-- `DB_CONNECTION_POOL_EXHAUSTION`
-- `DOWNSTREAM_TIMEOUT`
-- `RETRY_STORM`
-- `CIRCUIT_BREAKER_OPEN`
-
-The evaluation dataset now contains 72 cases, expanded from 57 by adding 15 downstream cases. The cache, database, and downstream cases still use strict `docId + section` expected references. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
-
-Run local checks:
+BM25-like retrieval 不依赖 Milvus、embedding API 或 `DASHSCOPE_API_KEY`：
 
 ```powershell
-cd faultlab-ai-service
-.\.venv\Scripts\python.exe -m pytest
+cd D:\JavaProjects\ai-faultlab\faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever bm25 --top-k 3 --report
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --retriever all --top-k 3 --report
+```
+
+BM25 regression gate：
+
+```powershell
+cd D:\JavaProjects\ai-faultlab\faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\check_rag_regression.py --retriever bm25
 ```
 
-BM25-like retrieval is dependency-free and is not standard BM25. Lightweight rerank remains rule-based and is not a real rerank model. Hybrid and Milvus evaluation require local Milvus, embedding availability, and a current Runbook index; if cache, database, or downstream Runbooks have not been indexed into Milvus, Milvus-only results for those fault types can be empty while BM25 still works.
+Hybrid 和 Milvus evaluation 依赖本地 Milvus、embedding 可用性和当前 Runbook 索引状态。
+
+## 9. Frontend Build Check
+
+如果改动了前端代码或需要验证构建：
+
+```powershell
+cd D:\JavaProjects\ai-faultlab\faultlab-frontend
+npm.cmd run build
+```
+
+文档改动通常不需要运行前端 build。
+
+## 10. 常见注意事项
+
+- 不要提交 `deploy/.env`、真实 API Key、`.env` 或 `.venv`
+- 不要提交 `faultlab-ai-service/data/runbook_index_state.json`
+- 不要提交 `faultlab-ai-service/data/runbook_index_tasks.json`
+- 不要提交 `faultlab-ai-service/evaluation/reports/*.md`
+- 不要提交 `faultlab-ai-service/evaluation/reports/*.json`
+- 修改 MySQL schema 后，如果已有旧 volume，可能需要执行 `docker compose down -v` 后重新启动
+- Python AI Service 的模型、Milvus 和 retrieval 默认配置目前主要在 `faultlab-ai-service/app/config.py`
