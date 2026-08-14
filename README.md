@@ -6,10 +6,6 @@ AI FaultLab 用于模拟典型 Java 后端故障，并通过 Metrics、Trace、�
 
 当前版本不提供公网在线 Demo。项目展示以 GitHub README、真实本地运行截图和本地启动文档为主。它是学习型 / Demo 工程，不是生产级故障注入平台，也不等同于生产 AIOps 系统。
 
-<p >
-  <img src="docs/assets/screenshots/img.png" alt="AI FaultLab Demo" width="1817">
-</p>
-
 
 ## 项目能做什么
 
@@ -203,7 +199,9 @@ ai-faultlab
 
 - [Demo Guide](docs/demo-guide.md)
 - [Screenshots Guide](docs/screenshots.md)
+- [Environment Variables Guide](docs/env-guide.md)
 - [Local Dev Guide](docs/local-dev.md)
+- [Release Checklist](docs/release-checklist.md)
 - [Architecture](docs/architecture.md)
 - [API Contract](docs/api-contract.md)
 - [RAG Architecture](docs/rag-architecture.md)

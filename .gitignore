@@ -113,6 +113,7 @@ faultlab-ai-service/data/runbook_index_state.json
 faultlab-ai-service/data/runbook_index_tasks.json
 !faultlab-ai-service/data/.gitkeep
 faultlab-ai-service/evaluation/reports/*.md
+faultlab-ai-service/evaluation/reports/*.json
 !faultlab-ai-service/evaluation/reports/.gitkeep
 
 # =========================
