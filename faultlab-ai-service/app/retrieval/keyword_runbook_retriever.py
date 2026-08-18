@@ -5,13 +5,13 @@ from typing import Any
 
 from app.retrieval.base import BaseRunbookRetriever
 from app.retrieval.models import RunbookChunk
+from app.retrieval.tokenizer import TOKEN_PATTERN, token_set
 from app.schemas import DiagnosisRequest
 
 logger = logging.getLogger(__name__)
 
 FRONT_MATTER_PATTERN = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 SECTION_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
-TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_\-.]+")
 
 
 class KeywordRunbookRetriever(BaseRunbookRetriever):
@@ -158,22 +158,7 @@ class KeywordRunbookRetriever(BaseRunbookRetriever):
         return self._tokens_from_value(values)
 
     def _tokens_from_value(self, value: Any) -> set[str]:
-        if value is None:
-            return set()
-        if isinstance(value, str):
-            return {token.lower() for token in TOKEN_PATTERN.findall(value)}
-        if isinstance(value, dict):
-            tokens: set[str] = set()
-            for key, item in value.items():
-                tokens.update(self._tokens_from_value(key))
-                tokens.update(self._tokens_from_value(item))
-            return tokens
-        if isinstance(value, list | tuple | set):
-            tokens: set[str] = set()
-            for item in value:
-                tokens.update(self._tokens_from_value(item))
-            return tokens
-        return self._tokens_from_value(str(value))
+        return token_set(value)
 
     def _split_keywords(self, value: str | list[str]) -> list[str]:
         if isinstance(value, list):
