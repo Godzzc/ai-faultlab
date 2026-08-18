@@ -4,7 +4,7 @@
 
 ## 1. 30 秒版本
 
-我在 AI FaultLab 中实现了一个面向故障诊断的 RAG 链路。离线阶段会把 Runbook Markdown 按 section 切分，计算 hash 做索引治理，调用百炼 embedding 写入 Milvus。在线阶段会根据 Evidence Package 同时做 Milvus 向量召回和 BM25-like 关键词召回，再用 RRF 融合和轻量 rerank 选出 topK Runbook chunk，注入 Prompt 让 LLM 生成诊断报告，同时校验 runbookReferences。最后还补了 Hit@K、Recall@K、MRR 的检索评测和 Markdown 报告。
+我在 AI FaultLab 中实现了一个面向故障诊断的 RAG 链路。离线阶段会把 Runbook Markdown 按 section 切分，计算 hash 做索引治理，调用百炼 embedding 写入 Milvus。在线阶段会根据 Evidence Package 同时做 Milvus 向量召回和 Okapi BM25 召回，再用 RRF 融合和轻量 rerank 选出 topK Runbook chunk，注入 Prompt 让 LLM 生成诊断报告，同时校验 runbookReferences。最后还补了 Hit@K、Recall@K、MRR 的检索评测和 Markdown 报告。
 
 ## 2. 2 分钟版本
 
@@ -18,11 +18,11 @@ Runbook 用 Markdown 存放，每个文档有 front matter，包括 `docId`、`f
 
 ### 在线检索怎么做
 
-诊断时 Java Backend 把 Evidence Package 发给 Python AI Service。AI Service 从 ruleResult、metrics、trace summary 和 scenarioCode 构造 query，同时走 Milvus 向量召回和 BM25-like 关键词召回。两路结果用 RRF 融合，再经过 lightweight rule-based rerank，最终选 topK chunk 注入 Prompt。
+诊断时 Java Backend 把 Evidence Package 发给 Python AI Service。AI Service 从 ruleResult、metrics、trace summary 和 scenarioCode 构造 query，同时走 Milvus 向量召回和 Okapi BM25 召回。两路结果用 RRF 融合，再经过 lightweight rule-based rerank，最终选 topK chunk 注入 Prompt。
 
 ### fallback 怎么做
 
-如果 Milvus 或 embedding 不可用，Hybrid 仍尝试 BM25-like keyword retrieval。如果 Hybrid 整体失败，RetrievalService 会退到 KeywordRunbookRetriever。如果 LLM 不可用或返回非法 JSON，workflow 会返回 rule-based fallback report。模型返回的 runbookReferences 还会被服务端过滤，只保留本次召回里的 `docId + section`。
+如果 Milvus 或 embedding 不可用，Hybrid 仍尝试 BM25 retrieval。如果 Hybrid 整体失败，RetrievalService 会退到 KeywordRunbookRetriever。如果 LLM 不可用或返回非法 JSON，workflow 会返回 rule-based fallback report。模型返回的 runbookReferences 还会被服务端过滤，只保留本次召回里的 `docId + section`。
 
 ### evaluation 怎么做
 
@@ -30,7 +30,7 @@ Runbook 用 Markdown 存放，每个文档有 front matter，包括 `docId`、`f
 
 ### 当前不足
 
-当前还不是生产级 RAG 平台。BM25 是 BM25-like，不是标准搜索引擎级 BM25；rerank 是规则型，不是真实 rerank 模型；case 数量还少；没有 nDCG、可视化 UI、CI regression gate；索引状态还是本地 JSON，不适合多实例生产部署。
+当前还不是生产级 RAG 平台。BM25 是本地 Okapi BM25 实现并叠加轻量领域 boost，不是完整搜索引擎平台；rerank 是规则型，不是真实 rerank 模型；case 数量还少；没有 nDCG、可视化 UI、CI regression gate；索引状态还是本地 JSON，不适合多实例生产部署。
 
 ## 3. 面试官追问与回答
 
@@ -58,13 +58,13 @@ A：索引依赖 embedding API、网络和 Milvus。如果启动时自动索引�
 
 A：Runbook section 被向量化后需要语义召回能力。Milvus 负责向量存储和相似度搜索，可以召回和 query 语义相关但不完全同词的 chunk。
 
-### Q7：为什么还要 BM25-like keyword retrieval？
+### Q7：为什么还要 BM25 retrieval？
 
 A：故障诊断里有大量指标名、字段名和技术词，比如 `publishCount`、`rejectedTaskCount`、`redisSetNxFailCount`。这些词精确命中很重要，关键词召回能弥补纯向量召回对字段名不稳定的问题。
 
 ### Q8：你现在是不是标准 BM25？
 
-A：不是。当前是 BM25-like keyword scoring，包含 TF、IDF、长度归一化和字段加权，但没有包装成标准搜索引擎级 BM25。
+A：当前是本地 Okapi BM25 实现。它以 section chunk 为 document，包含 TF、IDF、长度归一化，并在基础分之后叠加轻量领域 boost，但没有包装成完整搜索引擎平台。
 
 ### Q9：RRF 是什么，为什么用它？
 
@@ -72,11 +72,11 @@ A：RRF 是 Reciprocal Rank Fusion，基于多个结果列表中的排名做融�
 
 ### Q10：rerank 是怎么做的？
 
-A：当前是 lightweight rule-based rerank，不调用真实 rerank 模型。规则包括 faultType 是否匹配、section 是否属于排查/修复/常见原因这类重要 section、Evidence 和 metric 是否命中、是否被 Milvus 和 BM25-like 双路召回。
+A：当前是 lightweight rule-based rerank，不调用真实 rerank 模型。规则包括 faultType 是否匹配、section 是否属于排查/修复/常见原因这类重要 section、Evidence 和 metric 是否命中、是否被 Milvus 和 BM25 双路召回。
 
 ### Q11：如果 Milvus 挂了怎么办？
 
-A：Hybrid 内部会捕获 vector retrieval 异常，并继续使用 BM25-like 结果。如果 Hybrid 整体失败，RetrievalService 还会 fallback 到 KeywordRunbookRetriever，目标是不让诊断接口因为 RAG 失败直接 500。
+A：Hybrid 内部会捕获 vector retrieval 异常，并继续使用 BM25 结果。如果 Hybrid 整体失败，RetrievalService 还会 fallback 到 KeywordRunbookRetriever，目标是不让诊断接口因为 RAG 失败直接 500。
 
 ### Q12：如何防止模型编造引用？
 
@@ -93,7 +93,7 @@ A：当前不是标准 BM25，没有真实 rerank 模型；评测 case 数量少
 ## 4. 简历写法
 
 - 设计并实现 AI FaultLab Runbook RAG 链路：支持 Markdown section chunking、百炼 embedding、Milvus 向量索引、Prompt 注入 Runbook Context 和 `runbookReferences` 校验。
-- 实现 Hybrid Retrieval：结合 Milvus vector retrieval 与 BM25-like keyword retrieval，通过 RRF fusion 和 lightweight rule-based rerank 输出 topK Runbook chunk，并提供 keyword-only fallback。
+- 实现 Hybrid Retrieval：结合 Milvus vector retrieval 与 Okapi BM25 retrieval，通过 RRF fusion 和 lightweight rule-based rerank 输出 topK Runbook chunk，并提供 keyword-only fallback。
 - 构建 RAG Retrieval Evaluation：基于 9 个故障检索 case 计算 Hit@K、Recall@K、MRR，支持 API/CLI 评测和 Markdown 报告输出，用于分析 miss case 和检索调优。
 
 ## 5. 项目亮点总结

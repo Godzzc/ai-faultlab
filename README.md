@@ -168,8 +168,8 @@ http://localhost:5173
 
 支持的 retriever：
 
-- `bm25`：读取本地 Markdown Runbooks 的 BM25-like keyword retrieval。
-- `hybrid`：Milvus vector retrieval + BM25-like retrieval + RRF fusion + lightweight rerank。
+- `bm25`：读取本地 Markdown Runbooks 的 Okapi BM25 + lightweight domain boost retrieval。
+- `hybrid`：Milvus vector retrieval + Okapi BM25 retrieval + RRF fusion + lightweight rerank。
 - `milvus`：基于本地 Milvus 索引的向量检索。
 - `all`：分别运行多个 retriever 并输出对比结果。
 

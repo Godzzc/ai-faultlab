@@ -12,7 +12,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Uses an abstract retrieval layer for Runbook retrieval.
 - Supports Milvus Vector Retrieval for Runbook chunks.
 - Uses Alibaba Cloud Bailian `text-embedding-v4` for Runbook embeddings.
-- Supports Hybrid Retrieval Basic: Milvus vector retrieval + BM25-like keyword retrieval + RRF fusion + lightweight rerank.
+- Supports Hybrid Retrieval Basic: Milvus vector retrieval + Okapi BM25 retrieval + RRF fusion + lightweight rerank.
 - Keeps keyword-only retrieval available when Milvus or embedding is unavailable.
 - Injects retrieved Runbook Context into the diagnosis prompt.
 - Validates `runbookReferences` so only retrieved `docId` and `section` pairs are retained.
@@ -46,7 +46,7 @@ The retrieval layer is organized around:
 
 - `BaseRunbookRetriever`: shared retriever interface.
 - `MilvusRunbookRetriever`: vector retriever backed by Milvus.
-- `Bm25RunbookRetriever`: local Markdown BM25-like keyword retriever.
+- `Bm25RunbookRetriever`: local Markdown Okapi BM25 retriever with lightweight domain boosts.
 - `HybridRunbookRetriever`: default retriever that combines vector and keyword results.
 - `KeywordRunbookRetriever`: local Markdown fallback retriever.
 - `reciprocal_rank_fusion`: RRF result fusion.
@@ -54,7 +54,7 @@ The retrieval layer is organized around:
 - `RetrievalService`: workflow-facing entry point.
 - `RunbookChunk`: shared retrieval result model.
 
-`RetrievalService` uses `HybridRunbookRetriever` by default. The hybrid retriever calls Milvus vector retrieval and BM25-like keyword retrieval, fuses the two ranked result lists with Reciprocal Rank Fusion, and then applies a lightweight rule-based rerank before returning the final topK chunks. If the hybrid retriever itself fails, `RetrievalService` still falls back to `KeywordRunbookRetriever`.
+`RetrievalService` uses `HybridRunbookRetriever` by default. The hybrid retriever calls Milvus vector retrieval and Okapi BM25 retrieval, fuses the two ranked result lists with Reciprocal Rank Fusion, and then applies a lightweight rule-based rerank before returning the final topK chunks. If the hybrid retriever itself fails, `RetrievalService` still falls back to `KeywordRunbookRetriever`.
 
 The Milvus retriever:
 
@@ -64,19 +64,20 @@ The Milvus retriever:
 - Applies faultType filtering.
 - Returns `RunbookChunk` objects to the hybrid retriever.
 
-The BM25-like keyword retriever:
+The BM25 retriever:
 
 - Reads local Markdown files only.
 - Parses `docId`, `title`, `faultType`, and `keywords`.
 - Splits content by second-level headings (`##`) into sections.
 - Applies strong filtering by `ruleResult.faultType` or `experiment.scenarioCode`.
 - Extracts terms from the shared retrieval query text, including fault type, rule name, rule reason, evidence, suggestions, metrics, and trace summary.
-- Scores title, section, content, and runbook keywords with BM25-like keyword scoring.
+- Builds a chunk-level Okapi BM25 index and scores query terms with `k1=1.5`, `b=0.75`, smoothed non-negative IDF, and document-length normalization.
+- Applies lightweight deterministic domain boosts after the BM25 base score, including faultType matches, section intent, metric-name hits, and evidence-key hits.
 - Returns the top matching chunks.
 
 The current BM25 implementation is intentionally lightweight and dependency-free. It uses TF, IDF, light document length normalization, title/section/keyword/content boosts, exact metric-name and evidence-key boosts, and a strong `faultType` boost, but it is not a full search-engine BM25 implementation.
 
-For v0.8 retrieval tuning, Runbook front matter keywords and section content include more metric field names and English aliases from miss cases. `query_builder.py` also adds stable query fields and lightweight domain hints derived from metrics and evidence, while keeping deduplication and length control. This improves evaluation and debug consistency without introducing standard BM25 or a real rerank model.
+For v0.8 retrieval tuning, Runbook front matter keywords and section content include more metric field names and English aliases from miss cases. `query_builder.py` also adds stable query fields and lightweight domain hints derived from metrics and evidence, while keeping deduplication and length control. This improves evaluation and debug consistency without introducing a real rerank model.
 
 The current rerank implementation is rule-based. It does not call an LLM, embedding model, or dedicated rerank model. It boosts chunks that match the fault type, metric and evidence keys, chunks found by both vector and keyword retrieval, and section intent signals such as root cause, fix, metrics, troubleshooting, and risk.
 
@@ -86,7 +87,7 @@ This version does not include FAISS, Elasticsearch, LangChain, LangGraph, MCP, T
 
 Future upgrades can add:
 
-- standard BM25
+- stronger BM25 tuning and calibration
 - BGE reranker or Alibaba Cloud Bailian rerank
 - more retrieval evaluation cases beyond the current 72-case baseline
 - nDCG
@@ -196,7 +197,7 @@ When `report=true`, the response includes `markdownReport`. The report contains:
 - Miss Cases
 - Optimization Suggestions
 
-The optimization suggestions are rule-based and do not call an LLM. After the case expansion, metrics may decrease because the evaluation baseline is stricter; treat that as stronger coverage, not an automatic system regression. Use miss cases to guide later Runbook keyword, query construction, BM25-like scoring, and rerank weight tuning. Current reporting limits: no nDCG and no visualization UI.
+The optimization suggestions are rule-based and do not call an LLM. After the case expansion, metrics may decrease because the evaluation baseline is stricter; treat that as stronger coverage, not an automatic system regression. Use miss cases to guide later Runbook keyword, query construction, BM25 scoring and domain boosts, and rerank weight tuning. Current reporting limits: no nDCG and no visualization UI.
 
 ## RAG Evaluation Regression Gate
 
@@ -232,7 +233,7 @@ GitHub Actions runs `python -m pytest` and the BM25-only gate:
 python scripts/check_rag_regression.py --retriever bm25
 ```
 
-When the gate fails, check Runbook keyword coverage, section title changes, query construction fields, BM25-like scoring changes, and accidental topK/RRF/rerank parameter changes.
+When the gate fails, check Runbook keyword coverage, section title changes, query construction fields, BM25 scoring or domain boost changes, and accidental topK/RRF/rerank parameter changes.
 
 ## RAG Retrieval Debug
 
@@ -269,7 +270,7 @@ CLI:
 .\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --output evaluation/reports/debug_mq_backlog.json
 ```
 
-Use this to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus. Vector debug depends on Milvus and embedding availability; if unavailable, debug output keeps BM25 results and records the vector failure in `warnings`.
+Use this to analyze miss cases, debug query construction, compare Milvus and BM25 recall, and inspect RRF/rerank ordering changes. BM25 debug works without Milvus. Vector debug depends on Milvus and embedding availability; if unavailable, debug output keeps BM25 results and records the vector failure in `warnings`.
 
 ## Runbook Management Basic
 
@@ -332,7 +333,7 @@ Runbook Markdown
 
 边界说明：
 
-- BM25-like keyword retrieval 不是标准搜索引擎级 BM25。
+- BM25 retrieval 使用本地 Okapi BM25 实现，并在基础分之后叠加轻量领域 boost。
 - lightweight rerank 是规则型排序，不是真实 rerank 模型。
 - 当前没有 Runbook 管理后台、可视化评测 UI 或 hybrid required regression gate。
 - 当前索引状态使用本地 JSON，不适合多实例生产共享状态。
@@ -505,7 +506,7 @@ Fallback returns a displayable rule-based report when:
 
 Fallback reports keep `ruleResult.evidence` and `ruleResult.suggestions` when available.
 
-Runbook retrieval fallback is separate from diagnosis fallback. If Milvus retrieval or embedding fails, hybrid retrieval continues with BM25-like keyword results. If the hybrid retriever itself fails, diagnosis continues with `KeywordRunbookRetriever`.
+Runbook retrieval fallback is separate from diagnosis fallback. If Milvus retrieval or embedding fails, hybrid retrieval continues with BM25 results. If the hybrid retriever itself fails, diagnosis continues with `KeywordRunbookRetriever`.
 
 ## Local Verification
 

@@ -1,14 +1,13 @@
 import logging
-import re
 from dataclasses import replace
 from typing import Any
 
 from app.retrieval.models import RunbookChunk
+from app.retrieval.tokenizer import token_set
 from app.schemas import DiagnosisRequest
 
 logger = logging.getLogger(__name__)
 
-TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_\-.]+")
 IMPORTANT_SECTIONS = (
     "\u6392\u67e5\u6b65\u9aa4",
     "\u4fee\u590d\u5efa\u8bae",
@@ -223,20 +222,7 @@ class LightweightRunbookReranker:
         return {section: boost for section, boost in intents.items() if boost > 0}
 
     def _tokens(self, value: str) -> set[str]:
-        return {token.lower() for token in TOKEN_PATTERN.findall(value or "")}
+        return token_set(value)
 
     def _tokens_from_any(self, value: Any) -> set[str]:
-        if value is None:
-            return set()
-        if isinstance(value, dict):
-            tokens: set[str] = set()
-            for key, item in value.items():
-                tokens.update(self._tokens(str(key)))
-                tokens.update(self._tokens_from_any(item))
-            return tokens
-        if isinstance(value, list | tuple | set):
-            tokens: set[str] = set()
-            for item in value:
-                tokens.update(self._tokens_from_any(item))
-            return tokens
-        return self._tokens(str(value))
+        return token_set(value)

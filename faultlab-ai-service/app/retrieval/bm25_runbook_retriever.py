@@ -1,12 +1,17 @@
 import math
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever, TOKEN_PATTERN
+from app.retrieval.keyword_runbook_retriever import KeywordRunbookRetriever
 from app.retrieval.models import RunbookChunk
 from app.retrieval.query_builder import build_retrieval_query
+from app.retrieval.tokenizer import token_set, tokenize_any
 from app.schemas import DiagnosisRequest
+
+DEFAULT_K1 = 1.5
+DEFAULT_B = 0.75
 
 
 @dataclass(frozen=True)
@@ -18,38 +23,45 @@ class QuerySignals:
 
 
 class Bm25RunbookRetriever(KeywordRunbookRetriever):
+    def __init__(
+        self,
+        runbooks_dir: Path | str | None = None,
+        k1: float = DEFAULT_K1,
+        b: float = DEFAULT_B,
+    ) -> None:
+        super().__init__(runbooks_dir)
+        self.k1 = k1
+        self.b = b
+        self.chunks: list[RunbookChunk] = []
+        self.tokenized_docs: list[list[str]] = []
+        self.doc_lengths: list[int] = []
+        self.avg_doc_length = 0.0
+        self.term_document_frequency: dict[str, int] = {}
+        self.term_idf: dict[str, float] = {}
+        self.term_frequency_by_doc: list[Counter[str]] = []
+
     def retrieve(
         self,
         request: DiagnosisRequest,
         trace_summary: dict[str, Any],
         top_k: int = 3,
     ) -> list[RunbookChunk]:
-        chunks = self._load_chunks()
-        fault_type = self._request_fault_type(request)
-        if fault_type:
-            chunks = [chunk for chunk in chunks if chunk.faultType == fault_type]
-        if not chunks:
+        self._build_bm25_index(self._load_chunks())
+        if not self.chunks:
             return []
 
         query_signals = self._extract_query_signals(request, trace_summary)
         if not query_signals.terms:
             return []
 
-        doc_terms = [self._content_terms(chunk) for chunk in chunks]
-        document_frequency = self._document_frequency(doc_terms)
-        average_length = sum(len(terms) for terms in doc_terms) / max(len(doc_terms), 1)
+        fault_type = self._request_fault_type(request)
+        candidate_indexes = self._candidate_indexes(fault_type)
+        if not candidate_indexes:
+            return []
 
         scored_chunks = [
-            self._with_bm25_like_score(
-                chunk,
-                terms,
-                query_signals,
-                document_frequency,
-                len(chunks),
-                average_length,
-                fault_type,
-            )
-            for chunk, terms in zip(chunks, doc_terms, strict=True)
+            self._with_bm25_score(doc_index, query_signals, fault_type)
+            for doc_index in candidate_indexes
         ]
         matched_chunks = [chunk for chunk in scored_chunks if chunk.score > 0]
         matched_chunks.sort(key=lambda chunk: chunk.score, reverse=True)
@@ -69,25 +81,42 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
     ) -> QuerySignals:
         query_text = build_retrieval_query(request, trace_summary)
         return QuerySignals(
-            terms=self._dedupe_terms(self._tokens_from_value(query_text)),
+            terms=self._dedupe_terms(token_set(query_text)),
             metric_names=self._metric_names(request),
             evidence_keys=self._evidence_keys(request),
             section_intents=self._section_intents(request),
         )
 
-    def _content_terms(self, chunk: RunbookChunk) -> list[str]:
+    def _build_bm25_index(self, chunks: list[RunbookChunk]) -> None:
+        self.chunks = chunks
+        self.tokenized_docs = [self._document_tokens(chunk) for chunk in chunks]
+        self.doc_lengths = [len(tokens) for tokens in self.tokenized_docs]
+        self.avg_doc_length = sum(self.doc_lengths) / len(self.doc_lengths) if self.doc_lengths else 0.0
+        self.term_document_frequency = self._document_frequency(self.tokenized_docs)
+        self.term_idf = {
+            term: self._idf(len(self.tokenized_docs), document_frequency)
+            for term, document_frequency in self.term_document_frequency.items()
+        }
+        self.term_frequency_by_doc = [Counter(tokens) for tokens in self.tokenized_docs]
+
+    def _candidate_indexes(self, fault_type: str) -> list[int]:
+        if not fault_type:
+            return list(range(len(self.chunks)))
+        return [
+            index
+            for index, chunk in enumerate(self.chunks)
+            if chunk.faultType == fault_type
+        ]
+
+    def _document_tokens(self, chunk: RunbookChunk) -> list[str]:
         values = [
+            chunk.faultType,
             chunk.title,
             chunk.section,
-            " ".join(chunk.keywords),
-            chunk.faultType,
+            chunk.keywords,
             chunk.content,
         ]
-        return [
-            token.lower()
-            for value in values
-            for token in TOKEN_PATTERN.findall(str(value or ""))
-        ]
+        return [token for value in values for token in tokenize_any(value)]
 
     def _document_frequency(self, doc_terms: list[list[str]]) -> dict[str, int]:
         frequencies: dict[str, int] = {}
@@ -96,68 +125,52 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
                 frequencies[term] = frequencies.get(term, 0) + 1
         return frequencies
 
-    def _with_bm25_like_score(
+    def _idf(self, document_count: int, document_frequency: int) -> float:
+        if document_count <= 0 or document_frequency <= 0:
+            return 0.0
+        return math.log(1 + (document_count - document_frequency + 0.5) / (document_frequency + 0.5))
+
+    def _with_bm25_score(
         self,
-        chunk: RunbookChunk,
-        terms: list[str],
+        doc_index: int,
         query_signals: QuerySignals,
-        document_frequency: dict[str, int],
-        document_count: int,
-        average_length: float,
         fault_type: str,
     ) -> RunbookChunk:
-        term_counts = Counter(terms)
-        title_tokens = self._tokens_from_value(chunk.title)
-        section_tokens = self._tokens_from_value(chunk.section)
-        keyword_tokens = self._tokens_from_value(" ".join(chunk.keywords))
-        content_tokens = self._tokens_from_value(chunk.content)
-        content_length = max(len(terms), 1)
-        k1 = 1.5
-        b = 0.75
+        chunk = self.chunks[doc_index]
+        term_counts = self.term_frequency_by_doc[doc_index]
+        title_tokens = token_set(chunk.title)
+        section_tokens = token_set(chunk.section)
+        keyword_tokens = token_set(chunk.keywords)
+        content_tokens = token_set(chunk.content)
+        doc_length = self.doc_lengths[doc_index] if doc_index < len(self.doc_lengths) else 0
 
         score = 0.0
         for term in query_signals.terms:
             tf = term_counts.get(term, 0)
             if tf <= 0:
                 continue
-            df = document_frequency.get(term, 0)
-            idf = math.log(1 + (document_count - df + 0.5) / (df + 0.5))
-            normalized_tf = (tf * (k1 + 1)) / (
-                tf + k1 * (1 - b + b * content_length / max(average_length, 1))
+            denominator = tf + self.k1 * (
+                1 - self.b + self.b * doc_length / max(self.avg_doc_length, 1.0)
             )
-            term_score = idf * normalized_tf
-            # Keep field boosts explicit: front matter keywords and section titles
-            # should guide strict docId+section matching, while content hits still matter.
-            if term in keyword_tokens:
-                term_score *= 3.2
-            elif term in section_tokens:
-                term_score *= 2.8
-            elif term in title_tokens:
-                term_score *= 1.8
-            score += term_score
+            normalized_tf = (tf * (self.k1 + 1)) / denominator if denominator else 0.0
+            term_score = self.term_idf.get(term, 0.0) * normalized_tf
+            score += self._boosted_term_score(term_score, term, title_tokens, section_tokens, keyword_tokens)
 
-        if fault_type and chunk.faultType == fault_type:
-            score += 6.0
-
-        metric_hits = query_signals.metric_names & (keyword_tokens | content_tokens | section_tokens)
-        evidence_key_hits = query_signals.evidence_keys & (keyword_tokens | content_tokens | section_tokens)
-        if metric_hits:
-            score += min(4.5, 1.15 * len(metric_hits))
-        if evidence_key_hits:
-            score += min(3.0, 0.75 * len(evidence_key_hits))
-
-        section_intent_boost = query_signals.section_intents.get(chunk.section, 0.0)
-        if section_intent_boost:
-            score += section_intent_boost
-
-        # Light normalization prevents verbose sections from winning purely by
-        # carrying more terms, without erasing useful dense keyword matches.
-        score = score / (1 + content_length / 650)
+        score += self._domain_boost(
+            chunk,
+            query_signals,
+            fault_type,
+            section_tokens,
+            keyword_tokens,
+            content_tokens,
+        )
 
         metadata = {
             **(chunk.metadata or {}),
             "retrievalSource": "bm25",
             "bm25Score": score,
+            "bm25K1": self.k1,
+            "bm25B": self.b,
         }
         return RunbookChunk(
             docId=chunk.docId,
@@ -170,6 +183,68 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             source="bm25",
             metadata=metadata,
         )
+
+    def _boosted_term_score(
+        self,
+        term_score: float,
+        term: str,
+        title_tokens: set[str],
+        section_tokens: set[str],
+        keyword_tokens: set[str],
+    ) -> float:
+        if term in keyword_tokens:
+            return term_score * 2.6
+        if term in section_tokens:
+            return term_score * 2.4
+        if term in title_tokens:
+            return term_score * 1.5
+        return term_score
+
+    def _domain_boost(
+        self,
+        chunk: RunbookChunk,
+        query_signals: QuerySignals,
+        fault_type: str,
+        section_tokens: set[str],
+        keyword_tokens: set[str],
+        content_tokens: set[str],
+    ) -> float:
+        score = 0.0
+        if fault_type and chunk.faultType == fault_type:
+            score += 4.0
+
+        searchable_tokens = keyword_tokens | content_tokens | section_tokens
+        metric_hits = query_signals.metric_names & searchable_tokens
+        evidence_key_hits = query_signals.evidence_keys & searchable_tokens
+        if metric_hits:
+            score += min(4.5, 1.15 * len(metric_hits))
+        if evidence_key_hits:
+            score += min(3.0, 0.75 * len(evidence_key_hits))
+
+        score += query_signals.section_intents.get(chunk.section, 0.0)
+        return score
+
+    def _with_bm25_like_score(
+        self,
+        chunk: RunbookChunk,
+        terms: list[str],
+        query_signals: QuerySignals,
+        document_frequency: dict[str, int],
+        document_count: int,
+        average_length: float,
+        fault_type: str,
+    ) -> RunbookChunk:
+        self.chunks = [chunk]
+        self.tokenized_docs = [terms]
+        self.doc_lengths = [len(terms)]
+        self.avg_doc_length = average_length
+        self.term_document_frequency = document_frequency
+        self.term_idf = {
+            term: self._idf(document_count, frequency)
+            for term, frequency in document_frequency.items()
+        }
+        self.term_frequency_by_doc = [Counter(terms)]
+        return self._with_bm25_score(0, query_signals, fault_type)
 
     def _dedupe_terms(self, terms: set[str]) -> list[str]:
         return sorted(term for term in terms if term)
@@ -208,16 +283,16 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
         tokens = {
             token.lower()
             for value in values
-            for token in self._tokens_from_value(value)
+            for token in tokenize_any(value)
         }
 
         suggestions = request.rule_result.suggestions if request.rule_result else []
         intents = {
-            "核心指标": 0.0,
-            "常见原因": 0.0,
-            "排查步骤": 0.0,
-            "修复建议": 0.0,
-            "风险提示": 0.0,
+            "鏍稿績鎸囨爣": 0.0,
+            "甯歌鍘熷洜": 0.0,
+            "鎺掓煡姝ラ": 0.0,
+            "淇寤鸿": 0.0,
+            "椋庨櫓鎻愮ず": 0.0,
         }
         if tokens & {
             "reason",
@@ -231,7 +306,7 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             "missingkeycount",
             "unstablekeycount",
         }:
-            intents["常见原因"] += 1.25
+            intents["甯歌鍘熷洜"] += 1.25
         if suggestions or tokens & {
             "suggestion",
             "suggestions",
@@ -245,7 +320,7 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             "reuse",
             "add",
         }:
-            intents["修复建议"] += 1.35
+            intents["淇寤鸿"] += 1.35
         if tokens & {
             "metricname",
             "metricvalue",
@@ -258,7 +333,7 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             "redissetnxfailcount",
             "duplicatecount",
         }:
-            intents["核心指标"] += 1.2
+            intents["鏍稿績鎸囨爣"] += 1.2
         if tokens & {
             "check",
             "inspect",
@@ -270,7 +345,7 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             "queuecapacity",
             "rejectedexecutionhandler",
         }:
-            intents["排查步骤"] += 1.15
+            intents["鎺掓煡姝ラ"] += 1.15
         if tokens & {
             "risk",
             "deadlettercount",
@@ -284,5 +359,5 @@ class Bm25RunbookRetriever(KeywordRunbookRetriever):
             "hashmismatchcount",
             "dbuniqueindexexists",
         }:
-            intents["风险提示"] += 1.25
+            intents["椋庨櫓鎻愮ず"] += 1.25
         return {section: boost for section, boost in intents.items() if boost > 0}

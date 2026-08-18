@@ -19,7 +19,7 @@ The output includes `hitAtK`, `recallAtK`, `mrr`, each threshold, `passed`, and 
 
 The first GitHub Actions gate runs only BM25 retrieval, so it does not require Milvus, embeddings, or `DASHSCOPE_API_KEY`. Hybrid and Milvus evaluation can still be run locally, but they depend on Milvus and embedding availability and are not required by CI yet.
 
-These thresholds are v0.5 baseline values, not production metrics. They can be raised later after the evaluation dataset becomes larger and more stable. When the gate fails, check Runbook keywords, section titles, query construction fields, BM25-like scoring, and accidental topK/RRF/rerank parameter changes.
+These thresholds are v0.5 baseline values, not production metrics. They can be raised later after the evaluation dataset becomes larger and more stable. When the gate fails, check Runbook keywords, section titles, query construction fields, BM25 scoring or domain boosts, and accidental topK/RRF/rerank parameter changes.
 
 ## RAG Retrieval Debug
 
@@ -38,9 +38,9 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
 ```
 
-Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. It is useful for analyzing miss cases, query construction, Runbook keyword coverage, Milvus and BM25-like recall differences, RRF fusion, and lightweight rerank ordering changes.
+Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. It is useful for analyzing miss cases, query construction, Runbook keyword coverage, Milvus and BM25 recall differences, RRF fusion, and lightweight rerank ordering changes.
 
-Current limits: no LLM call, no frontend UI, no visualization chart, no standard BM25, and no real rerank model. Milvus debug depends on Milvus and embedding availability. BM25 debug can run without Milvus.
+Current limits: no LLM call, no frontend UI, no visualization chart, and no real rerank model. Milvus debug depends on Milvus and embedding availability. BM25 debug can run without Milvus.
 
 ## v0.8 Retrieval Tuning Notes
 
@@ -48,7 +48,7 @@ The v0.8 retrieval tuning pass uses the expanded 27-case evaluation dataset and 
 
 Query construction now keeps `faultType`, `faultName`, `reason`, `evidence`, `suggestions`, metric name/value/component, and trace summary signals in the retrieval query text with basic deduplication and length control. It also adds lightweight domain hints derived from metric and evidence fields, such as `slow consumer`, `rejection policy`, `unique index`, and `Redis error`.
 
-This remains BM25-like keyword retrieval, not standard BM25. The reranker remains lightweight and rule-based, not a real rerank model.
+The local keyword retriever uses Okapi BM25 with lightweight domain boosts. The reranker remains lightweight and rule-based, not a real rerank model.
 
 ## v0.9 Cache Evaluation Cases
 
@@ -76,7 +76,7 @@ Expected references remain strict `docId + section` pairs. The new database Runb
 
 The BM25 regression thresholds are unchanged. If metrics fall after adding cases, first inspect miss cases and tune Runbook wording or keywords. Do not lower `evaluation/rag_eval_thresholds.json` just to pass the gate.
 
-BM25-like retrieval is still not standard BM25, and lightweight rerank is still rule-based rather than a real rerank model. Hybrid and Milvus evaluation still require local Milvus, embedding service availability, and a current Runbook vector index.
+BM25 retrieval uses dependency-free Okapi scoring with lightweight domain boosts, and lightweight rerank is still rule-based rather than a real rerank model. Hybrid and Milvus evaluation still require local Milvus, embedding service availability, and a current Runbook vector index.
 
 ## v0.11 Downstream Evaluation Cases
 
@@ -90,13 +90,13 @@ Expected references remain strict `docId + section` pairs. The new downstream Ru
 
 The BM25 regression thresholds are unchanged. If metrics fall after adding cases, first inspect miss cases and tune Runbook wording or keywords. Do not lower `evaluation/rag_eval_thresholds.json` just to pass the gate.
 
-BM25-like retrieval is still not standard BM25, and lightweight rerank is still rule-based rather than a real rerank model. Hybrid and Milvus evaluation still require local Milvus, embedding service availability, and a current Runbook vector index. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
+BM25 retrieval uses dependency-free Okapi scoring with lightweight domain boosts, and lightweight rerank is still rule-based rather than a real rerank model. Hybrid and Milvus evaluation still require local Milvus, embedding service availability, and a current Runbook vector index. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
 
 ## v0.8 Scoring and Rerank Tuning
 
-The v0.8 scoring pass keeps the retrieval stack dependency-free and tunes only the explainable rules. BM25-like scoring now applies explicit boosts for matching `faultType`, section titles, front matter keywords, content terms, metric names, and evidence keys, with a light length normalization so longer sections do not win only because they contain more words.
+The scoring pass keeps the retrieval stack dependency-free. BM25 now uses chunk-level Okapi scoring with `k1=1.5`, `b=0.75`, smoothed non-negative IDF, TF saturation, and document-length normalization. After the BM25 base score, it applies explicit lightweight boosts for matching `faultType`, section intent, front matter keywords, metric names, and evidence keys.
 
-The lightweight reranker now uses rule-based section intent signals. Reason or root-cause style queries can lift `常见原因`, suggestion or remediation queries can lift `修复建议`, metric and evidence-heavy queries can lift `核心指标`, diagnostic checks can lift `排查步骤`, and risk terms can lift `风险提示`. This is still not a standard BM25 implementation and still not a real rerank model.
+The lightweight reranker now uses rule-based section intent signals. Reason or root-cause style queries can lift `常见原因`, suggestion or remediation queries can lift `修复建议`, metric and evidence-heavy queries can lift `核心指标`, diagnostic checks can lift `排查步骤`, and risk terms can lift `风险提示`. This is still not a real rerank model.
 
 The tuning is validated with the expanded evaluation cases and the BM25 regression gate. A metric change should be interpreted together with miss case details, partial recall cases, and reciprocal rank changes, not as a standalone signal.
 
@@ -185,7 +185,7 @@ MRR 使用第一个命中的 expected ref 的倒数排名。
 POST http://localhost:8000/ai/runbooks/evaluate
 ```
 
-评测 BM25-like：
+评测 BM25：
 
 ```json
 {"retriever":"bm25","topK":3}
@@ -257,17 +257,17 @@ Markdown report 面向人工阅读、复盘和博客整理。报告包含：
 
 ### 扩充数据集后指标下降是正常现象
 
-评测集从 9 个 case 扩充到 72 个 case 后，BM25-like、Milvus 或 Hybrid 的 Hit@K、Recall@K、MRR 可能下降。这通常说明评测集覆盖了更细的故障表达和更难的 section 匹配，不应直接解释为系统退化。
+评测集从 9 个 case 扩充到 72 个 case 后，BM25、Milvus 或 Hybrid 的 Hit@K、Recall@K、MRR 可能下降。这通常说明评测集覆盖了更细的故障表达和更难的 section 匹配，不应直接解释为系统退化。
 
-后续优化应基于 miss case 逐步调整 Runbook keywords、query construction、BM25-like scoring 和 rerank 权重，而不是降低 regression threshold 或放宽 expected 匹配标准。
+后续优化应基于 miss case 逐步调整 Runbook keywords、query construction、BM25 scoring 与 domain boost、rerank 权重，而不是降低 regression threshold 或放宽 expected 匹配标准。
 
 ### Hybrid 不一定每个 case 都最好
 
-Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-like 或 Milvus。评测时应看整体指标、按 faultType 分组指标，以及具体 miss case。
+Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25 或 Milvus。评测时应看整体指标、按 faultType 分组指标，以及具体 miss case。
 
-### BM25-like miss 是 baseline signal
+### BM25 miss 是 baseline signal
 
-如果 BM25-like 对某个 case miss，通常说明：
+如果 BM25 对某个 case miss，通常说明：
 
 - Runbook keywords 不够。
 - section 标题或正文没有覆盖指标名。
@@ -290,7 +290,7 @@ Hybrid 的目标是提升整体稳定性，不保证每个 case 都优于 BM25-l
 - hybrid gate 尚未作为 CI 必过项。
 - Milvus evaluation 依赖 Milvus 和 embedding 可用。
 - 当前优化建议是规则型，不调用 LLM。
-- 当前 BM25-like 不是标准搜索引擎级 BM25。
+- 当前 BM25 是本地 Okapi BM25 实现，并叠加轻量领域 boost；它不是完整搜索引擎平台。
 - 当前 lightweight rerank 不是真实 rerank 模型。
 
 ## 9. 后续计划
