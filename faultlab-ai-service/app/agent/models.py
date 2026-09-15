@@ -18,6 +18,13 @@ class AgentStageStatus(StrEnum):
     SKIPPED = "SKIPPED"
 
 
+class AgentToolCallStatus(StrEnum):
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
 class AgentStageRecord(CamelModel):
     state: DiagnosisAgentState
     started_at: datetime | None = None
@@ -29,6 +36,27 @@ class AgentStageRecord(CamelModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class AgentToolCallRecord(CamelModel):
+    tool_name: str
+    state: DiagnosisAgentState
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    status: AgentToolCallStatus = AgentToolCallStatus.RUNNING
+    input_summary: dict[str, Any] = Field(default_factory=dict)
+    output_summary: dict[str, Any] = Field(default_factory=dict)
+    error_code: str | None = None
+    error_message: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AgentToolSummary(CamelModel):
+    total_calls: int = 0
+    success_calls: int = 0
+    failed_calls: int = 0
+    total_duration_ms: int = 0
+
+
 class AgentRunSummary(CamelModel):
     request_id: str
     experiment_id: str | None = None
@@ -37,6 +65,8 @@ class AgentRunSummary(CamelModel):
     completed_at: datetime | None = None
     total_duration_ms: int | None = None
     stage_records: list[AgentStageRecord] = Field(default_factory=list)
+    tool_calls: list[AgentToolCallRecord] = Field(default_factory=list)
+    tool_summary: AgentToolSummary | None = None
     warnings: list[str] = Field(default_factory=list)
     fallback_reason: str | None = None
     error_code: str | None = None
@@ -60,6 +90,7 @@ class DiagnosisAgentContext(CamelModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     stage_records: list[AgentStageRecord] = Field(default_factory=list)
+    tool_calls: list[AgentToolCallRecord] = Field(default_factory=list)
 
     @classmethod
     def from_request(cls, request: DiagnosisRequest) -> "DiagnosisAgentContext":
@@ -85,8 +116,18 @@ class DiagnosisAgentContext(CamelModel):
             completed_at=self.completed_at,
             total_duration_ms=total_duration_ms,
             stage_records=self.stage_records,
+            tool_calls=self.tool_calls,
+            tool_summary=self._build_tool_summary(),
             warnings=self.warnings,
             fallback_reason=self.fallback_reason,
             error_code=self.error_code,
             error_message=self.error_message,
+        )
+
+    def _build_tool_summary(self) -> AgentToolSummary:
+        return AgentToolSummary(
+            total_calls=len(self.tool_calls),
+            success_calls=sum(1 for call in self.tool_calls if call.status == AgentToolCallStatus.SUCCESS),
+            failed_calls=sum(1 for call in self.tool_calls if call.status == AgentToolCallStatus.FAILED),
+            total_duration_ms=sum(call.duration_ms or 0 for call in self.tool_calls),
         )

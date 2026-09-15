@@ -18,6 +18,8 @@ That worked for the demo path, but it made the diagnosis lifecycle hard to obser
 
 The first v0.14.0 phase adds a lightweight, single-agent state machine. It does not add LangChain, LangGraph, CrewAI, a database, multi-agent planning, or extra LLM calls.
 
+Phase 2 keeps the same state machine and wraps deterministic business capabilities as Agent Tools. See [Diagnosis Agent Tools](diagnosis-agent-tools.md).
+
 ## State Flow
 
 ```mermaid
@@ -143,4 +145,4 @@ The debug store is intentionally in-memory only. It keeps the latest 100 runs, r
 - There is no dynamic tool selection.
 - There is no long-term memory.
 - The run store is in-memory only.
-- Agent Tools are reserved for a later phase.
+- Tool execution is deterministic; dynamic Tool Selection is reserved for a later phase.
