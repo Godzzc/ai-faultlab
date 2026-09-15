@@ -168,6 +168,8 @@ v0.14.0 adds a lightweight single-agent diagnosis state machine inside `faultlab
 
 Details: [Diagnosis Agent State Machine](docs/diagnosis-agent-state-machine.md)
 
+Phase 2 adds deterministic Agent Tools for evidence collection, Runbook retrieval, reference validation, and report generation. Details: [Diagnosis Agent Tools](docs/diagnosis-agent-tools.md)
+
 ## RAG Evaluation
 
 `faultlab-ai-service` 包含 Runbook 检索评测能力。当前 evaluation cases 为 72 个，覆盖 12 个故障场景，并使用严格的 `docId + section` 命中判断。
