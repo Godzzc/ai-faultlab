@@ -184,7 +184,7 @@ faultlab-ai-service/data/runbook_index_tasks.json
 
 ## 8. RAG Retrieval Evaluation
 
-BM25-like retrieval 不依赖 Milvus、embedding API 或 `DASHSCOPE_API_KEY`：
+BM25 retrieval 不依赖 Milvus、embedding API 或 `DASHSCOPE_API_KEY`：
 
 ```powershell
 cd D:\JavaProjects\ai-faultlab\faultlab-ai-service

@@ -195,7 +195,7 @@ http://localhost:5173
 ## 6. 已知限制
 
 - 当前故障多为 deterministic simulation，不是真实生产压测。
-- BM25-like 不是标准 BM25。
+- BM25 使用本地 Okapi BM25 实现，并叠加轻量领域 boost。
 - lightweight rerank 不是真实 rerank 模型。
 - Milvus 检索效果依赖本地索引是否已重建。
 - AI 报告依赖 Python AI Service 和模型配置。

@@ -21,28 +21,15 @@ def run_diagnosis_workflow(
     model_router: ModelRouter | None = None,
     retrieval_service: RetrievalService | None = None,
 ) -> DiagnosisResponse:
-    try:
-        trace_summary = build_trace_summary(request)
-        runbook_chunks = retrieve_runbook(request, trace_summary, retrieval_service)
-        if not should_call_llm():
-            logger.info("fallback reason=llm_disabled_or_api_key_missing")
-            return fallback_if_needed(request, build_fallback_report(request))
+    from app.agent.orchestrator import DiagnosisAgentOrchestrator
 
-        system_prompt, user_prompt = build_prompt(request, trace_summary, runbook_chunks, prompt_builder)
-        route_result = select_model(request, trace_summary, model_router)
-        response = call_llm_and_parse(
-            request,
-            system_prompt,
-            user_prompt,
-            route_result.model,
-            llm_client,
-        )
-        validate_runbook_references(response, runbook_chunks)
-        return fallback_if_needed(request, response)
-    except Exception as exc:
-        logger.exception("Diagnosis workflow failed: %s", exc)
-        logger.info("fallback reason=workflow_exception")
-        return build_fallback_report(request)
+    return DiagnosisAgentOrchestrator().run(
+        request,
+        llm_client=llm_client,
+        prompt_builder=prompt_builder,
+        model_router=model_router,
+        retrieval_service=retrieval_service,
+    )
 
 
 def should_call_llm() -> bool:

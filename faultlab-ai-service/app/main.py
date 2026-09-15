@@ -3,6 +3,8 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from app.agent.models import AgentRunSummary
+from app.agent.run_store import AGENT_RUN_STORE
 from app.config import settings
 from app.evaluation.retrieval_evaluator import evaluate_retrievers
 from app.retrieval.debug_models import RetrievalDebugRequest, RetrievalDebugResponse
@@ -46,6 +48,14 @@ def health() -> dict[str, str]:
 @app.post("/ai/diagnosis/generate", response_model=DiagnosisResponse)
 def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisResponse:
     return run_diagnosis_workflow(request)
+
+
+@app.get("/ai/diagnosis/agent-runs/{request_id}", response_model=AgentRunSummary)
+def get_diagnosis_agent_run(request_id: str) -> AgentRunSummary:
+    run = AGENT_RUN_STORE.get(request_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Diagnosis agent run not found: {request_id}")
+    return run
 
 
 @app.post("/ai/runbooks/index")

@@ -203,7 +203,7 @@ class RetrievalEvaluationReportGenerator:
                 if reason == "Partial recall":
                     suggestions.add("- Review topK and section coverage for cases with partial recall.")
                 if result.retriever_name == "bm25":
-                    suggestions.add("- For BM25-like retrieval, add domain metric names, English aliases, and field names to Runbook keywords and section text.")
+                    suggestions.add("- For BM25 retrieval, add domain metric names, English aliases, and field names to Runbook keywords and section text.")
                 if result.retriever_name == "milvus":
                     suggestions.add("- For Milvus retrieval, improve query construction and chunk wording so semantically relevant sections are easier to match.")
                 weak_fault_types[self.infer_fault_type(result.case_id)] += 1

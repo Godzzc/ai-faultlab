@@ -13,9 +13,9 @@ cd faultlab-ai-service
 .\.venv\Scripts\python.exe scripts\debug_retrieval.py --case-id mq_backlog_core_metrics --top-k 3
 ```
 
-Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to analyze miss cases, debug query construction, compare Milvus and BM25-like recall, and inspect RRF/rerank ordering changes.
+Debug output includes `queryText`, `vectorResults`, `bm25Results`, `fusionResults`, `rerankResults`, `finalResults`, and `warnings`. Use it to analyze miss cases, debug query construction, compare Milvus and BM25 recall, and inspect RRF/rerank ordering changes.
 
-Current limits still apply: no LLM call in debug mode, no frontend UI, no visualization chart, no standard BM25, no real rerank model, and no required hybrid gate in CI. Milvus debug depends on Milvus and embeddings; BM25 debug works without Milvus.
+Current limits still apply: no LLM call in debug mode, no frontend UI, no visualization chart, no real rerank model, and no required hybrid gate in CI. Milvus debug depends on Milvus and embeddings; BM25 debug works without Milvus.
 
 ## v0.5 Runbook Management Update
 
@@ -66,7 +66,7 @@ v0.5 RAG Demo
 - 基于二级标题的 section chunking。
 - 阿里云百炼 `text-embedding-v4` embedding。
 - Milvus vector retrieval。
-- BM25-like keyword retrieval。
+- Okapi BM25 retrieval。
 - RRF fusion。
 - lightweight rule-based rerank。
 - Runbook index management basic。
@@ -338,7 +338,7 @@ http://localhost:5173
 Evidence Package
   -> query construction
   -> Milvus vector retrieval
-  -> BM25-like keyword retrieval
+  -> Okapi BM25 retrieval
   -> RRF fusion
   -> lightweight rerank
   -> Runbook Context
@@ -357,7 +357,7 @@ Evidence Package
 演示讲法：
 
 - Milvus 负责语义召回，适合“消费变慢导致堆积”这类语义表达。
-- BM25-like 负责精确词召回，适合 `publishCount`、`consumeCount`、`backlogCount` 这类指标名。
+- BM25 负责精确词召回，适合 `publishCount`、`consumeCount`、`backlogCount` 这类指标名。
 - RRF 不直接混合不同检索器的分数，而是基于排名融合，避免向量分数和关键词分数不可比。
 - lightweight rerank 是规则型，不是真实 rerank 模型；它会根据 faultType、section 类型、证据命中和双路召回等因素加权。
 
@@ -374,8 +374,8 @@ docker compose stop milvus-standalone
 
 - 诊断接口不应返回 500。
 - Hybrid 中 vector retrieval 会失败或为空。
-- BM25-like keyword retrieval 仍可返回本地 Markdown Runbook Context。
-- 如果 LLM 可用，仍可基于 Evidence 和 BM25-like Runbook Context 生成报告。
+- BM25 retrieval 仍可返回本地 Markdown Runbook Context。
+- 如果 LLM 可用，仍可基于 Evidence 和 BM25 Runbook Context 生成报告。
 
 恢复 Milvus：
 
@@ -393,7 +393,7 @@ docker compose start milvus-standalone
 POST http://localhost:8000/ai/runbooks/evaluate
 ```
 
-BM25-like：
+BM25：
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri "http://localhost:8000/ai/runbooks/evaluate" -ContentType "application/json" -Body '{"retriever":"bm25","topK":3}'

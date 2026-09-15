@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 
 from app import workflow
@@ -8,6 +9,7 @@ from app.retrieval.hybrid_runbook_retriever import HybridRunbookRetriever
 from app.retrieval.models import RunbookChunk
 from app.retrieval.reranker import LightweightRunbookReranker
 from app.retrieval.retrieval_service import RetrievalService
+from app.retrieval.tokenizer import tokenize_text
 from app.schemas import DiagnosisRequest
 
 RUNBOOK_DIR = Path(__file__).resolve().parents[1] / "runbooks"
@@ -166,6 +168,48 @@ def test_bm25_scoring_boosts_fault_type_match():
     ).score
 
     assert matching_score > mismatched_score
+
+
+def test_bm25_scoring_uses_okapi_formula():
+    retriever = Bm25RunbookRetriever(RUNBOOK_DIR)
+    first = RunbookChunk(
+        docId="first",
+        title="",
+        faultType="",
+        section="",
+        content="retry retry",
+        keywords=[],
+    )
+    second = RunbookChunk(
+        docId="second",
+        title="",
+        faultType="",
+        section="",
+        content="timeout",
+        keywords=[],
+    )
+    retriever._build_bm25_index([first, second])
+
+    result = retriever._with_bm25_score(
+        0,
+        QuerySignals(terms=["retry"], metric_names=set(), evidence_keys=set(), section_intents={}),
+        "",
+    )
+
+    expected_idf = math.log(1 + (2 - 1 + 0.5) / (1 + 0.5))
+    expected_tf = (2 * (1.5 + 1)) / (2 + 1.5 * (1 - 0.75 + 0.75 * 2 / 1.5))
+    assert result.score == expected_idf * expected_tf
+
+
+def test_tokenizer_preserves_metric_name_and_subterms():
+    tokens = tokenize_text("db.connection.acquire.timeout.count cache_miss_rate publishCount")
+
+    assert "db.connection.acquire.timeout.count" in tokens
+    assert {"db", "connection", "acquire", "timeout", "count"}.issubset(tokens)
+    assert "cache_miss_rate" in tokens
+    assert {"cache", "miss", "rate"}.issubset(tokens)
+    assert "publishcount" in tokens
+    assert {"publish", "count"}.issubset(tokens)
 
 
 def test_bm25_section_title_hit_can_lift_ranking(monkeypatch):

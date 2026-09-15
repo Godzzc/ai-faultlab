@@ -12,9 +12,9 @@ Current scope remains intentionally small: no MySQL Runbook tables, no async que
 
 The v0.8 tuning pass keeps the same retrieval architecture and focuses on Runbook keywords plus query construction. Runbook Markdown now includes more section-level metric names and English aliases for miss cases, while preserving `docId`, `faultType`, and section titles used by strict evaluation refs.
 
-`query_builder.py` now builds query text from stable Evidence Package fields: `faultType`, `faultName`, `reason`, `evidence`, `suggestions`, metrics, and trace summary slow/error span signals. It also performs basic empty-field handling, deduplication, and length control. BM25-like retrieval uses this same query text for term extraction so CLI evaluation, debug, hybrid fallback, and Milvus query construction stay aligned.
+`query_builder.py` now builds query text from stable Evidence Package fields: `faultType`, `faultName`, `reason`, `evidence`, `suggestions`, metrics, and trace summary slow/error span signals. It also performs basic empty-field handling, deduplication, and length control. BM25 retrieval uses this same query text for term extraction so CLI evaluation, debug, hybrid fallback, and Milvus query construction stay aligned.
 
-This is still BM25-like keyword retrieval, not standard BM25, and the reranker remains lightweight and rule-based rather than a real rerank model.
+The local keyword retriever now uses Okapi BM25 with lightweight deterministic domain boosts, and the reranker remains lightweight and rule-based rather than a real rerank model.
 
 ## v0.9 Cache Runbooks
 
@@ -28,7 +28,7 @@ Each cache Runbook uses the same six sections: `现象`, `核心指标`, `常见
 
 The front matter parser supports both the existing comma-separated `keywords:` format and YAML-style keyword lists. No new dependency is introduced.
 
-The retrieval architecture is unchanged: Evidence Package input is converted into query text, BM25-like retrieval reads local Markdown chunks, Milvus retrieval uses indexed embeddings when available, Hybrid combines both with RRF and lightweight rule-based rerank. BM25-like is still not standard BM25, and lightweight rerank is still not a model-based reranker.
+The retrieval architecture is unchanged: Evidence Package input is converted into query text, BM25 retrieval reads local Markdown chunks, Milvus retrieval uses indexed embeddings when available, Hybrid combines both with RRF and lightweight rule-based rerank. BM25 uses dependency-free Okapi scoring plus lightweight domain boosts, and lightweight rerank is still not a model-based reranker.
 
 The next v0.8 tuning step adjusts only explainable scoring rules. `Bm25RunbookRetriever` boosts matched `faultType`, section title terms, front matter keywords, content terms, metric names, and evidence keys, then applies light section length normalization. `LightweightRunbookReranker` keeps RRF output intact and adds small intent-based boosts for root-cause, remediation, metric, troubleshooting, and risk-oriented sections. RRF still owns rank fusion and `docId + section` de-duplication; rerank only reorders fused chunks.
 
@@ -42,7 +42,7 @@ v0.10.0 adds three database bottleneck Runbooks under `faultlab-ai-service/runbo
 
 Each database Runbook uses the same six sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. Front matter keeps strict `docId`, `faultType`, and keywords that include Java backend metric fields such as `db.slow.query.count`, `db.lock.wait.count`, and `db.connection.acquire.timeout.count`.
 
-The retrieval architecture is still unchanged. BM25-like remains dependency-free and is not standard BM25. Lightweight rerank is still rule-based and not a real rerank model. Hybrid and Milvus continue to depend on local Milvus, embedding availability, and whether new Runbook chunks have been indexed.
+The retrieval architecture is still unchanged. BM25 remains dependency-free and uses Okapi scoring with lightweight domain boosts. Lightweight rerank is still rule-based and not a real rerank model. Hybrid and Milvus continue to depend on local Milvus, embedding availability, and whether new Runbook chunks have been indexed.
 
 ## v0.11 Downstream Runbooks
 
@@ -54,7 +54,7 @@ v0.11.0 adds three downstream timeout and resilience Runbooks under `faultlab-ai
 
 Each downstream Runbook uses the same six sections: `现象`, `核心指标`, `常见原因`, `排查步骤`, `修复建议`, and `风险提示`. Front matter keeps strict `docId`, `faultType`, and keywords that include Java backend metric fields such as `downstream.timeout.count`, `downstream.retry.amplification.factor`, and `circuit.open.count`.
 
-The retrieval architecture is still unchanged. BM25-like remains dependency-free and is not standard BM25. Lightweight rerank is still rule-based and not a real rerank model. Hybrid and Milvus continue to depend on local Milvus, embedding availability, and whether new Runbook chunks have been indexed. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
+The retrieval architecture is still unchanged. BM25 remains dependency-free and uses Okapi scoring with lightweight domain boosts. Lightweight rerank is still rule-based and not a real rerank model. Hybrid and Milvus continue to depend on local Milvus, embedding availability, and whether new Runbook chunks have been indexed. v0.11.0 is the last planned new fault-scenario RAG case batch; later work shifts toward frontend refinement, demo presentation, README updates, and server deployment.
 
 本文档描述 AI FaultLab 当前 v0.5 RAG Demo 的架构。它强调当前已经实现的工程链路、降级策略和评测能力，也明确当前不是生产级知识管理平台。
 
@@ -119,7 +119,7 @@ flowchart TD
 flowchart TD
     A[Evidence Package] --> B[query construction]
     B --> C[Milvus vector retrieval]
-    B --> D[BM25-like keyword retrieval]
+    B --> D[Okapi BM25 retrieval]
     C --> E[RRF fusion]
     D --> E
     E --> F[lightweight rerank]
@@ -156,7 +156,7 @@ flowchart TD
 
 降级策略：
 
-- Milvus 失败时，Hybrid 内部仍尝试 BM25-like keyword retrieval。
+- Milvus 失败时，Hybrid 内部仍尝试 Okapi BM25 retrieval。
 - Hybrid 整体失败时，`RetrievalService` fallback 到 `KeywordRunbookRetriever`。
 - LLM 失败、关闭或 API Key 缺失时，workflow fallback 到 rule-based report。
 - 非法 `runbookReferences` 会被过滤，只保留本次召回结果中的 `docId + section`。
@@ -185,11 +185,11 @@ flowchart TD
 
 ### HybridRunbookRetriever
 
-同时调用 Milvus vector retriever 和 BM25-like keyword retriever，对两路结果做 RRF fusion，再执行 lightweight rerank。
+同时调用 Milvus vector retriever 和 Okapi BM25 retriever，对两路结果做 RRF fusion，再执行 lightweight rerank。
 
 ### Bm25RunbookRetriever
 
-读取本地 Markdown chunk，基于 ruleResult、metrics 和 trace summary 提取词项，执行 BM25-like keyword scoring。它不是标准搜索引擎级 BM25。
+读取本地 Markdown chunk，基于 ruleResult、metrics 和 trace summary 提取词项，执行 chunk 级 Okapi BM25 scoring，并在基础分之后叠加 faultType、section intent、metric name 和 evidence key 等轻量领域 boost。
 
 ### fusion.py
 
@@ -253,9 +253,9 @@ v0.5 目标是验证索引治理闭环。本地 JSON 足够表达 content hash�
 
 索引依赖 Milvus、embedding API 和网络。启动时自动索引会拖慢服务启动，并放大外部依赖失败对服务可用性的影响。
 
-### BM25-like 而不是标准 BM25
+### Okapi BM25 + Lightweight Domain Boost
 
-当前实现是依赖少、易读、可演示的 keyword scoring。它包含 TF、IDF、长度归一化和字段加权，但不等同于完整搜索引擎级 BM25。
+当前实现是依赖少、易读、可演示的本地 Okapi BM25。每个 Runbook section chunk 作为一个 document，使用平滑 IDF、TF 饱和和文档长度归一化计算基础分；随后叠加少量确定性领域 boost，用于 faultType 精确匹配、section intent、metric name 和 evidence key 命中。
 
 ### rule-based rerank 而不是真实 rerank 模型
 

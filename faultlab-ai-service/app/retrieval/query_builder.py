@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.retrieval.tokenizer import tokenize_any
 from app.schemas import DiagnosisRequest
 
 MAX_QUERY_TEXT_LENGTH = 3000
@@ -158,25 +159,7 @@ def _request_tokens(request: DiagnosisRequest) -> set[str]:
 
 
 def _tokens_from_value(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, dict):
-        return [
-            token
-            for item in value.values()
-            for token in _tokens_from_value(item)
-        ]
-    if isinstance(value, (list, tuple, set)):
-        return [
-            token
-            for item in value
-            for token in _tokens_from_value(item)
-        ]
-    return [
-        token
-        for token in str(value).replace("=", " ").replace("/", " ").split()
-        if token
-    ]
+    return tokenize_any(value)
 
 
 def _field(name: str, value: Any) -> str:
