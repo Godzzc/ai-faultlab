@@ -7,6 +7,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 ## Current Capabilities
 
 - Receives Evidence Package input.
+- Runs diagnosis through a lightweight single-agent state machine with stage records.
 - Builds evidence-constrained LLM prompts.
 - Supports Runbook RAG Basic with local Markdown runbooks.
 - Uses an abstract retrieval layer for Runbook retrieval.
@@ -492,6 +493,24 @@ The response is a fixed `DiagnosisResponse`:
   "fallback": false
 }
 ```
+
+## Diagnosis Agent State Machine
+
+`POST /ai/diagnosis/generate` remains compatible, but internally the service now runs:
+
+```text
+RECEIVED -> COLLECT_EVIDENCE -> ANALYZE -> RETRIEVE -> VALIDATE -> GENERATE_REPORT -> COMPLETED
+```
+
+Retrieval failure can enter `FALLBACK -> GENERATE_REPORT -> COMPLETED`. Model provider or validation failures move the run to `FAILED` and return the existing fallback report shape.
+
+Debug the latest in-memory runs with:
+
+```text
+GET /ai/diagnosis/agent-runs/{requestId}
+```
+
+The debug store is in-memory only and keeps the latest 100 runs. See [Diagnosis Agent State Machine](../docs/diagnosis-agent-state-machine.md).
 
 ## Fallback
 

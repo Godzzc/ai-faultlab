@@ -59,6 +59,7 @@ class TraceTree(CamelModel):
 
 
 class DiagnosisRequest(CamelModel):
+    request_id: str = ""
     experiment: ExperimentInfo = Field(default_factory=ExperimentInfo)
     metrics: list[MetricItem] = Field(default_factory=list)
     trace_tree: TraceTree = Field(default_factory=TraceTree)

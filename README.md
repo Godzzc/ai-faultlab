@@ -162,6 +162,12 @@ http://localhost:5173
 
 更完整的环境准备、健康检查和排查命令见 [Local Dev Guide](docs/local-dev.md)。
 
+## Diagnosis Agent State Machine
+
+v0.14.0 adds a lightweight single-agent diagnosis state machine inside `faultlab-ai-service`. The external `POST /ai/diagnosis/generate` contract remains compatible, while the AI service now records state transitions, stage durations, fallback reasons, and debug run summaries in memory.
+
+Details: [Diagnosis Agent State Machine](docs/diagnosis-agent-state-machine.md)
+
 ## RAG Evaluation
 
 `faultlab-ai-service` 包含 Runbook 检索评测能力。当前 evaluation cases 为 72 个，覆盖 12 个故障场景，并使用严格的 `docId + section` 命中判断。
