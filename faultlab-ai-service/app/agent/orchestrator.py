@@ -22,6 +22,7 @@ class AgentErrorCode:
     RETRIEVAL_FAILED = "RETRIEVAL_FAILED"
     REFERENCE_VALIDATION_FAILED = "REFERENCE_VALIDATION_FAILED"
     MODEL_PROVIDER_FAILED = "MODEL_PROVIDER_FAILED"
+    REMEDIATION_PLANNING_FAILED = "REMEDIATION_PLANNING_FAILED"
 
 
 class ReferenceValidationError(Exception):
@@ -92,6 +93,11 @@ class DiagnosisAgentOrchestrator:
                 DiagnosisAgentState.GENERATE_REPORT,
                 lambda: self._generate_report(context, tool_registry),
                 error_code=AgentErrorCode.MODEL_PROVIDER_FAILED,
+            )
+            state_machine.run_stage(
+                DiagnosisAgentState.REMEDIATION_PLAN,
+                lambda: self._plan_remediation(context, tool_registry),
+                error_code=AgentErrorCode.REMEDIATION_PLANNING_FAILED,
             )
             state_machine.complete()
             return context.report or build_fallback_report(request)
@@ -193,6 +199,20 @@ class DiagnosisAgentOrchestrator:
         )
         context.report = result.data.get("report")
 
+    def _plan_remediation(self, context: DiagnosisAgentContext, tool_registry: AgentToolRegistry) -> None:
+        result = self.execute_tool(
+            "remediation_planning",
+            context,
+            DiagnosisAgentState.REMEDIATION_PLAN,
+            tool_registry,
+            fail_fast=False,
+        )
+        context.remediation_plan = result.data.get("remediationPlan")
+        if result.warnings:
+            context.warnings.extend(result.warnings)
+        if not result.success:
+            context.warnings.append(result.error_message or "Remediation planning failed")
+
     def execute_tool(
         self,
         tool_name: str,
@@ -268,6 +288,11 @@ class DiagnosisAgentOrchestrator:
             report = result.data["report"]
             summary["fallback"] = getattr(report, "fallback", None)
             summary["faultType"] = getattr(report, "fault_type", None)
+        if "remediationPlan" in result.data:
+            plan = result.data["remediationPlan"]
+            summary["planStatus"] = getattr(plan, "status", None)
+            summary["scenarioCode"] = getattr(plan, "scenario_code", None)
+            summary["actionCount"] = len(getattr(plan, "actions", []) or [])
         for key in ("fallback", "fallbackReason", "retrieverType", "model", "provider"):
             if key in result.metadata:
                 summary[key] = result.metadata[key]

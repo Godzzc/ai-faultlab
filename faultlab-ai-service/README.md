@@ -9,6 +9,7 @@ The service receives an Evidence Package from the Java backend, builds a constra
 - Receives Evidence Package input.
 - Runs diagnosis through a lightweight single-agent state machine with stage records.
 - Wraps deterministic diagnosis capabilities as Agent Tools with tool call records.
+- Generates policy-validated `RemediationPlan` proposals for selected scenarios without executing fixes.
 - Builds evidence-constrained LLM prompts.
 - Supports Runbook RAG Basic with local Markdown runbooks.
 - Uses an abstract retrieval layer for Runbook retrieval.
@@ -514,6 +515,8 @@ GET /ai/diagnosis/agent-runs/{requestId}
 The debug store is in-memory only and keeps the latest 100 runs. See [Diagnosis Agent State Machine](../docs/diagnosis-agent-state-machine.md).
 
 Phase 2 adds deterministic Agent Tools for evidence collection, Runbook retrieval, reference validation, and report generation. Tool calls are included in the same debug API. See [Diagnosis Agent Tools](../docs/diagnosis-agent-tools.md).
+
+v0.15.0 Phase 1 adds `RemediationPlanningTool` after diagnosis report generation. The tool writes a structured `remediationPlan` into the Agent run summary for supported scenarios. It does not call the Java Backend, create experiments, replay traffic, or modify any runtime state. See [Remediation Planning](../docs/remediation-planning.md).
 
 ## Fallback
 

@@ -20,6 +20,7 @@ AI FaultLab 用于模拟典型 Java 后端故障，并通过 Metrics、Trace、�
 - EvidencePackage：由 Java Backend 汇总实验、指标、Trace 和规则诊断结果，作为 AI 诊断输入。
 - Runbook RAG：从本地 Markdown Runbooks 中检索相关排查片段，为 AI 报告提供上下文。
 - AI Diagnosis Report：Python AI Service 调用模型生成结构化诊断报告，并在失败时回退到规则诊断结果。
+- Remediation Planning：将诊断建议转换为结构化 `RemediationPlan` 提案，首版只生成和校验修复参数，不执行修复。
 - Retrieval Evaluation：用评测集度量 Runbook 检索质量，支持 Hit@K、Recall@K 和 MRR。
 - Frontend Demo Console：Vue 前端提供场景选择、参数配置、实验结果、Metrics、Trace、Rule Diagnosis、AI Report 和 RAG Console 展示。
 
@@ -170,6 +171,8 @@ Details: [Diagnosis Agent State Machine](docs/diagnosis-agent-state-machine.md)
 
 Phase 2 adds deterministic Agent Tools for evidence collection, Runbook retrieval, reference validation, and report generation. Details: [Diagnosis Agent Tools](docs/diagnosis-agent-tools.md)
 
+v0.15.0 Phase 1 adds deterministic remediation planning after diagnosis report generation. It produces a policy-validated `RemediationPlan` proposal for selected scenarios without replaying experiments or changing backend state. Details: [Remediation Planning](docs/remediation-planning.md)
+
 ## RAG Evaluation
 
 `faultlab-ai-service` 包含 Runbook 检索评测能力。当前 evaluation cases 为 72 个，覆盖 12 个故障场景，并使用严格的 `docId + section` 命中判断。
@@ -218,6 +221,7 @@ ai-faultlab
 - [API Contract](docs/api-contract.md)
 - [RAG Architecture](docs/rag-architecture.md)
 - [RAG Evaluation Guide](docs/rag-evaluation-guide.md)
+- [Remediation Planning](docs/remediation-planning.md)
 
 
 ## License

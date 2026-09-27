@@ -1,6 +1,7 @@
 from app.agent.tools.base import AgentTool
 from app.agent.tools.evidence_tool import EvidenceCollectionTool
 from app.agent.tools.report_tool import DiagnosisReportGeneratorTool
+from app.agent.tools.remediation_planning_tool import RemediationPlanningTool
 from app.agent.tools.retrieval_tool import RunbookRetrievalTool
 from app.agent.tools.validation_tool import RunbookReferenceValidationTool
 
@@ -46,4 +47,5 @@ def build_default_tool_registry(
             model_router=model_router,
         )
     )
+    registry.register(RemediationPlanningTool())
     return registry

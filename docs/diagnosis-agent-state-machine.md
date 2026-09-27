@@ -32,7 +32,9 @@ stateDiagram-v2
     RETRIEVE --> FALLBACK
     FALLBACK --> GENERATE_REPORT
     VALIDATE --> GENERATE_REPORT
+    GENERATE_REPORT --> REMEDIATION_PLAN
     GENERATE_REPORT --> COMPLETED
+    REMEDIATION_PLAN --> COMPLETED
 
     COLLECT_EVIDENCE --> FAILED
     ANALYZE --> FAILED
@@ -40,6 +42,7 @@ stateDiagram-v2
     FALLBACK --> FAILED
     VALIDATE --> FAILED
     GENERATE_REPORT --> FAILED
+    REMEDIATION_PLAN --> FAILED
 
     COMPLETED --> [*]
     FAILED --> [*]
@@ -59,6 +62,7 @@ Allowed transitions are defined in `app/agent/state.py`. Terminal states are str
 - `retrievedChunks`
 - `validatedReferences`
 - `report`
+- `remediationPlan`
 - `warnings`
 - `fallbackReason`
 - `errorCode`
@@ -102,6 +106,7 @@ The state machine distinguishes these first-phase error codes:
 - `RETRIEVAL_FAILED`
 - `REFERENCE_VALIDATION_FAILED`
 - `MODEL_PROVIDER_FAILED`
+- `REMEDIATION_PLANNING_FAILED`
 
 Retrieval errors use the existing fallback direction. The agent records:
 
@@ -114,6 +119,8 @@ Then it continues through `FALLBACK -> GENERATE_REPORT -> COMPLETED` and returns
 Reference validation checks retrieved Runbook references before report generation. Model-generated `runbookReferences` are still filtered after LLM output so only references belonging to the current retrieval result are retained.
 
 Model provider failures move the agent to `FAILED`, record the failed stage and error details, and return the existing friendly fallback report shape. The FastAPI process does not crash.
+
+Remediation planning runs after a diagnosis report is produced. It creates a structured proposal only; it does not execute parameter changes, create a new Java Backend experiment, or perform replay.
 
 ## Debug API
 
@@ -131,6 +138,9 @@ It returns the latest in-memory run summary:
 - `createdAt`
 - `completedAt`
 - `stageRecords`
+- `toolCalls`
+- `toolSummary`
+- `remediationPlan`
 - `warnings`
 - `fallbackReason`
 - `errorCode`
