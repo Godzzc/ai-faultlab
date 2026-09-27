@@ -8,6 +8,7 @@ public class ExperimentDetailResponse {
     private String scenarioCode;
     private String status;
     private String traceId;
+    private String sourceExperimentId;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private LocalDateTime createdAt;
@@ -43,6 +44,14 @@ public class ExperimentDetailResponse {
 
     public void setTraceId(String traceId) {
         this.traceId = traceId;
+    }
+
+    public String getSourceExperimentId() {
+        return sourceExperimentId;
+    }
+
+    public void setSourceExperimentId(String sourceExperimentId) {
+        this.sourceExperimentId = sourceExperimentId;
     }
 
     public LocalDateTime getStartTime() {

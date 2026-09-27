@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -127,7 +128,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.MQ_BACKLOG),
                 eq(MqBacklogScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(mqBacklogScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
         verify(traceSpanMapper).insert(any(TraceSpan.class));
@@ -150,7 +153,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.THREAD_POOL_SATURATION),
                 eq(ThreadPoolSaturationScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(threadPoolSaturationScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
         assertThat(TraceContextHolder.get()).isNull();
@@ -172,7 +177,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.IDEMPOTENCY_CONFLICT),
                 eq(IdempotencyConflictScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(idempotencyConflictScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
         assertThat(TraceContextHolder.get()).isNull();
@@ -193,7 +200,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.CACHE_PENETRATION),
                 eq(CachePenetrationScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(cachePenetrationScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -213,7 +222,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.CACHE_BREAKDOWN),
                 eq(CacheBreakdownScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(cacheBreakdownScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -233,7 +244,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.CACHE_AVALANCHE),
                 eq(CacheAvalancheScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(cacheAvalancheScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -253,7 +266,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.DB_SLOW_QUERY),
                 eq(DbSlowQueryScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(dbSlowQueryScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -273,7 +288,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.DB_LOCK_CONTENTION),
                 eq(DbLockContentionScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(dbLockContentionScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -293,7 +310,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.DB_CONNECTION_POOL_EXHAUSTION),
                 eq(DbConnectionPoolExhaustionScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(dbConnectionPoolExhaustionScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -313,7 +332,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.DOWNSTREAM_TIMEOUT),
                 eq(DownstreamTimeoutScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(downstreamTimeoutScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -333,7 +354,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.RETRY_STORM),
                 eq(RetryStormScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(retryStormScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -353,7 +376,9 @@ class ExperimentServiceTests {
                 eq(ScenarioCode.CIRCUIT_BREAKER_OPEN),
                 eq(CircuitBreakerOpenScenario.SCENARIO_NAME),
                 eq(ExperimentStatus.RUNNING),
-                eq(response.getTraceId())
+                eq(response.getTraceId()),
+                eq(request.getParams()),
+                isNull()
         );
         verify(circuitBreakerOpenScenario).execute(eq(response.getExperimentId()), eq(request.getParams()));
     }
@@ -371,6 +396,29 @@ class ExperimentServiceTests {
         StartExperimentResponse response = experimentService.startExperiment(request);
 
         assertThat(traceIdDuringScenario.get()).isEqualTo(response.getTraceId());
+    }
+
+    @Test
+    void shouldStartReplayExperimentWithSourceExperimentId() {
+        Map<String, Object> params = Map.of("enableRetryLimit", true, "enableJitter", true);
+
+        StartExperimentResponse response = experimentService.startReplayExperiment(
+                ScenarioCode.RETRY_STORM,
+                params,
+                "exp_original"
+        );
+
+        assertThat(response.getExperimentId()).startsWith("exp_");
+        verify(experimentRecordService).createExperiment(
+                eq(response.getExperimentId()),
+                eq(ScenarioCode.RETRY_STORM),
+                eq(RetryStormScenario.SCENARIO_NAME),
+                eq(ExperimentStatus.RUNNING),
+                eq(response.getTraceId()),
+                eq(params),
+                eq("exp_original")
+        );
+        verify(retryStormScenario).execute(eq(response.getExperimentId()), eq(params));
     }
 
     @Test

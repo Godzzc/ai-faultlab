@@ -64,11 +64,9 @@ Current mappings:
 v0.15.0 does not:
 
 - execute the plan
-- call Java Backend to create a new experiment
 - modify Java Backend state
 - modify databases, Redis, RabbitMQ, code, or production systems
-- replay the experiment
 - compare before/after metrics
 - mark a plan as verified
 
-Counterfactual replay and verification are reserved for v0.16.0.
+The Python Diagnosis Agent still only creates a proposal. v0.15.0 Phase 2 adds a separate Java Backend Counterfactual Remediation Replay API that can consume the plan's `parameterPatch` in the controlled FaultLab experiment environment. Remediation validation and before/after comparison remain future work.

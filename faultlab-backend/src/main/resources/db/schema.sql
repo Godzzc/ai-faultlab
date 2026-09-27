@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS fault_experiment (
     scenario_name VARCHAR(128) NOT NULL,
     status VARCHAR(32) NOT NULL,
     trace_id VARCHAR(64) DEFAULT NULL,
+    params_json TEXT DEFAULT NULL,
+    source_experiment_id VARCHAR(64) DEFAULT NULL,
     start_time DATETIME DEFAULT NULL,
     end_time DATETIME DEFAULT NULL,
     duration_ms BIGINT DEFAULT NULL,
@@ -13,6 +15,7 @@ CREATE TABLE IF NOT EXISTS fault_experiment (
     PRIMARY KEY (id),
     UNIQUE KEY uk_fault_experiment_experiment_id (experiment_id),
     KEY idx_fault_experiment_trace_id (trace_id),
+    KEY idx_fault_experiment_source_experiment_id (source_experiment_id),
     KEY idx_fault_experiment_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -40,9 +40,28 @@ public class ExperimentService {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "scenarioCode is required");
         }
 
-        FaultScenario scenario = scenarioByCode.get(request.getScenarioCode());
+        return executeExperiment(request.getScenarioCode(), request.getParams(), null);
+    }
+
+    public StartExperimentResponse startReplayExperiment(
+            String scenarioCode,
+            Map<String, Object> params,
+            String sourceExperimentId
+    ) {
+        if (!StringUtils.hasText(scenarioCode)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "scenarioCode is required");
+        }
+        return executeExperiment(scenarioCode, params, sourceExperimentId);
+    }
+
+    private StartExperimentResponse executeExperiment(
+            String scenarioCode,
+            Map<String, Object> params,
+            String sourceExperimentId
+    ) {
+        FaultScenario scenario = scenarioByCode.get(scenarioCode);
         if (scenario == null) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "unsupported scenarioCode: " + request.getScenarioCode());
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "unsupported scenarioCode: " + scenarioCode);
         }
 
         String experimentId = createExperimentId();
@@ -55,9 +74,11 @@ public class ExperimentService {
                     scenario.scenarioCode(),
                     scenario.scenarioName(),
                     ExperimentStatus.RUNNING,
-                    traceId
+                    traceId,
+                    params,
+                    sourceExperimentId
             );
-            scenario.execute(experimentId, request.getParams());
+            scenario.execute(experimentId, params);
             traceManager.finishSpan(rootSpan);
             return new StartExperimentResponse(experimentId, traceId, ExperimentStatus.RUNNING);
         } catch (RuntimeException exception) {

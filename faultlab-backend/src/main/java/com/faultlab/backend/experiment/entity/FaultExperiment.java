@@ -26,6 +26,12 @@ public class FaultExperiment {
     @TableField("trace_id")
     private String traceId;
 
+    @TableField("params_json")
+    private String paramsJson;
+
+    @TableField("source_experiment_id")
+    private String sourceExperimentId;
+
     @TableField("start_time")
     private LocalDateTime startTime;
 
@@ -87,6 +93,22 @@ public class FaultExperiment {
 
     public void setTraceId(String traceId) {
         this.traceId = traceId;
+    }
+
+    public String getParamsJson() {
+        return paramsJson;
+    }
+
+    public void setParamsJson(String paramsJson) {
+        this.paramsJson = paramsJson;
+    }
+
+    public String getSourceExperimentId() {
+        return sourceExperimentId;
+    }
+
+    public void setSourceExperimentId(String sourceExperimentId) {
+        this.sourceExperimentId = sourceExperimentId;
     }
 
     public LocalDateTime getStartTime() {
