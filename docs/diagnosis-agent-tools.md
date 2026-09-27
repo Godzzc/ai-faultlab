@@ -125,7 +125,7 @@ It is deterministic and policy-validated:
 - no new LLM call
 - no dynamic tool selection
 - no Java Backend call
-- no experiment replay
+- no experiment replay from the Python Agent
 - no runtime or production change
 
 Unsupported scenarios return a successful tool result with `plan.status=UNSUPPORTED` and no actions. Invalid internally generated patches fail the tool with `REMEDIATION_PLANNING_FAILED`.
@@ -162,6 +162,6 @@ The agent does not:
 - use Memory
 - use multiple agents
 - execute remediation plans
-- run counterfactual replay
+- run counterfactual replay from the Python Agent
 
 Dynamic Tool Selection and Agent Planning are reserved for a later phase.

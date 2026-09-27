@@ -120,7 +120,7 @@ Reference validation checks retrieved Runbook references before report generatio
 
 Model provider failures move the agent to `FAILED`, record the failed stage and error details, and return the existing friendly fallback report shape. The FastAPI process does not crash.
 
-Remediation planning runs after a diagnosis report is produced. It creates a structured proposal only; it does not execute parameter changes, create a new Java Backend experiment, or perform replay.
+Remediation planning runs after a diagnosis report is produced. The Python Agent creates a structured proposal only; it does not execute parameter changes, create a new Java Backend experiment, or perform replay.
 
 ## Debug API
 

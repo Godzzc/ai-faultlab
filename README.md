@@ -173,6 +173,8 @@ Phase 2 adds deterministic Agent Tools for evidence collection, Runbook retrieva
 
 v0.15.0 Phase 1 adds deterministic remediation planning after diagnosis report generation. It produces a policy-validated `RemediationPlan` proposal for selected scenarios without replaying experiments or changing backend state. Details: [Remediation Planning](docs/remediation-planning.md)
 
+v0.15.0 Phase 2 adds Java Backend Counterfactual Remediation Replay. The backend clones the original experiment parameters, applies only a Java-side allowlisted remediation patch, and executes a new replay experiment with isolated Metrics and Trace. Details: [Counterfactual Remediation Replay](docs/counterfactual-remediation-replay.md)
+
 ## RAG Evaluation
 
 `faultlab-ai-service` 包含 Runbook 检索评测能力。当前 evaluation cases 为 72 个，覆盖 12 个故障场景，并使用严格的 `docId + section` 命中判断。
@@ -222,6 +224,7 @@ ai-faultlab
 - [RAG Architecture](docs/rag-architecture.md)
 - [RAG Evaluation Guide](docs/rag-evaluation-guide.md)
 - [Remediation Planning](docs/remediation-planning.md)
+- [Counterfactual Remediation Replay](docs/counterfactual-remediation-replay.md)
 
 
 ## License

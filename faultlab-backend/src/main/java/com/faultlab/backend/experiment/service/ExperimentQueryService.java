@@ -82,6 +82,7 @@ public class ExperimentQueryService {
         response.setScenarioCode(experiment.getScenarioCode());
         response.setStatus(experiment.getStatus());
         response.setTraceId(experiment.getTraceId());
+        response.setSourceExperimentId(experiment.getSourceExperimentId());
         response.setStartTime(experiment.getStartTime());
         response.setEndTime(experiment.getEndTime());
         response.setCreatedAt(experiment.getCreatedAt());

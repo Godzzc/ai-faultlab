@@ -2,8 +2,12 @@ package com.faultlab.backend.experiment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.faultlab.backend.experiment.dto.ExperimentDetailResponse;
+import com.faultlab.backend.experiment.dto.RemediationReplayRequest;
+import com.faultlab.backend.experiment.dto.RemediationReplayResponse;
 import com.faultlab.backend.experiment.dto.StartExperimentRequest;
 import com.faultlab.backend.experiment.dto.StartExperimentResponse;
+import com.faultlab.backend.experiment.remediation.RemediationReplayService;
+import com.faultlab.backend.experiment.remediation.RemediationReplayStatus;
 import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.experiment.service.ExperimentService;
 import com.faultlab.backend.metric.dto.MetricResponse;
@@ -40,6 +44,9 @@ class ExperimentControllerTests {
 
     @MockBean
     private ExperimentQueryService experimentQueryService;
+
+    @MockBean
+    private RemediationReplayService remediationReplayService;
 
     @Test
     void shouldStartMqBacklogExperiment() throws Exception {
@@ -115,6 +122,42 @@ class ExperimentControllerTests {
                 .andExpect(jsonPath("$.data.experimentId").value("exp-1"))
                 .andExpect(jsonPath("$.data.scenarioCode").value(ScenarioCode.MQ_BACKLOG))
                 .andExpect(jsonPath("$.data.traceId").value("trace-1"));
+    }
+
+    @Test
+    void shouldReplayRemediationWithApiResponse() throws Exception {
+        RemediationReplayRequest request = new RemediationReplayRequest();
+        request.setPlanId("plan_1");
+        request.setParameterPatch(Map.of("enableRetryLimit", true, "enableJitter", true));
+
+        RemediationReplayResponse response = new RemediationReplayResponse();
+        response.setPlanId("plan_1");
+        response.setOriginalExperimentId("exp_original");
+        response.setReplayExperimentId("exp_replay");
+        response.setScenarioCode(ScenarioCode.RETRY_STORM);
+        response.setOriginalParams(Map.of("requestCount", 100, "failureRatio", 0.7D));
+        response.setAppliedPatch(request.getParameterPatch());
+        response.setReplayParams(Map.of(
+                "requestCount", 100,
+                "failureRatio", 0.7D,
+                "enableRetryLimit", true,
+                "enableJitter", true
+        ));
+        response.setStatus(RemediationReplayStatus.COMPLETED);
+        when(remediationReplayService.replay(any(String.class), any(RemediationReplayRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/experiments/exp_original/remediation-replay")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.originalExperimentId").value("exp_original"))
+                .andExpect(jsonPath("$.data.replayExperimentId").value("exp_replay"))
+                .andExpect(jsonPath("$.data.scenarioCode").value(ScenarioCode.RETRY_STORM))
+                .andExpect(jsonPath("$.data.appliedPatch.enableRetryLimit").value(true))
+                .andExpect(jsonPath("$.data.replayParams.failureRatio").value(0.7D))
+                .andExpect(jsonPath("$.data.status").value(RemediationReplayStatus.COMPLETED));
     }
 
     @Test
