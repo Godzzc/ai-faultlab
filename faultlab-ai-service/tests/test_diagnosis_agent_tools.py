@@ -379,6 +379,7 @@ def test_orchestrator_executes_expected_tools(monkeypatch):
         "runbook_retrieval",
         "reference_validation",
         "diagnosis_report_generator",
+        "remediation_planning",
     ]
 
 
@@ -395,8 +396,8 @@ def test_agent_complete_flow_reaches_completed(monkeypatch):
 
     assert run is not None
     assert run.current_state == DiagnosisAgentState.COMPLETED
-    assert run.tool_summary.total_calls == 4
-    assert run.tool_summary.success_calls == 4
+    assert run.tool_summary.total_calls == 5
+    assert run.tool_summary.success_calls == 5
 
 
 def test_debug_api_returns_tool_calls(monkeypatch):

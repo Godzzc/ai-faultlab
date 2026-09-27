@@ -6,6 +6,7 @@ from uuid import uuid4
 from pydantic import Field
 
 from app.agent.state import DiagnosisAgentState
+from app.remediation.models import RemediationPlan
 from app.retrieval.models import RunbookChunk
 from app.schemas import CamelModel, DiagnosisRequest, DiagnosisResponse
 
@@ -67,6 +68,7 @@ class AgentRunSummary(CamelModel):
     stage_records: list[AgentStageRecord] = Field(default_factory=list)
     tool_calls: list[AgentToolCallRecord] = Field(default_factory=list)
     tool_summary: AgentToolSummary | None = None
+    remediation_plan: RemediationPlan | None = None
     warnings: list[str] = Field(default_factory=list)
     fallback_reason: str | None = None
     error_code: str | None = None
@@ -83,6 +85,7 @@ class DiagnosisAgentContext(CamelModel):
     retrieved_chunks: list[RunbookChunk] = Field(default_factory=list)
     validated_references: list[dict[str, Any]] = Field(default_factory=list)
     report: DiagnosisResponse | None = None
+    remediation_plan: RemediationPlan | None = None
     warnings: list[str] = Field(default_factory=list)
     fallback_reason: str | None = None
     error_code: str | None = None
@@ -118,6 +121,7 @@ class DiagnosisAgentContext(CamelModel):
             stage_records=self.stage_records,
             tool_calls=self.tool_calls,
             tool_summary=self._build_tool_summary(),
+            remediation_plan=self.remediation_plan,
             warnings=self.warnings,
             fallback_reason=self.fallback_reason,
             error_code=self.error_code,

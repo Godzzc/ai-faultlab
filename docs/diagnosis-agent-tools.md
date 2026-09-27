@@ -15,6 +15,7 @@ However, the business capabilities were still directly coupled to the orchestrat
 - Retrieval
 - Validation
 - Report Generation
+- Remediation Planning
 
 The state machine still decides the stage order. The agent does not dynamically choose tools.
 
@@ -27,16 +28,19 @@ flowchart TD
     A --> C[RETRIEVE]
     A --> D[VALIDATE]
     A --> E[GENERATE_REPORT]
+    A --> F[REMEDIATION_PLAN]
 
     B --> T1[EvidenceCollectionTool]
     C --> T2[RunbookRetrievalTool]
     D --> T3[ReferenceValidationTool]
     E --> T4[DiagnosisReportGeneratorTool]
+    F --> T5[RemediationPlanningTool]
 
     T1 --> CTX[DiagnosisAgentContext]
     T2 --> CTX
     T3 --> CTX
     T4 --> CTX
+    T5 --> CTX
 ```
 
 ## Tool Interface
@@ -110,6 +114,21 @@ Context:
 - tool call records
 - warnings and fallback reason
 - final report
+- remediation plan proposal
+
+## Remediation Planning Tool
+
+`RemediationPlanningTool` runs after report generation and produces a structured `RemediationPlan` proposal for supported scenarios.
+
+It is deterministic and policy-validated:
+
+- no new LLM call
+- no dynamic tool selection
+- no Java Backend call
+- no experiment replay
+- no runtime or production change
+
+Unsupported scenarios return a successful tool result with `plan.status=UNSUPPORTED` and no actions. Invalid internally generated patches fail the tool with `REMEDIATION_PLANNING_FAILED`.
 
 ## Tool Observability
 
@@ -142,5 +161,7 @@ The agent does not:
 - use Function Calling
 - use Memory
 - use multiple agents
+- execute remediation plans
+- run counterfactual replay
 
 Dynamic Tool Selection and Agent Planning are reserved for a later phase.

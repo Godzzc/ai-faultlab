@@ -9,6 +9,7 @@ class DiagnosisAgentState(StrEnum):
     FALLBACK = "FALLBACK"
     VALIDATE = "VALIDATE"
     GENERATE_REPORT = "GENERATE_REPORT"
+    REMEDIATION_PLAN = "REMEDIATION_PLAN"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
@@ -30,7 +31,12 @@ ALLOWED_TRANSITIONS: dict[DiagnosisAgentState, set[DiagnosisAgentState]] = {
     },
     DiagnosisAgentState.FALLBACK: {DiagnosisAgentState.GENERATE_REPORT, DiagnosisAgentState.FAILED},
     DiagnosisAgentState.VALIDATE: {DiagnosisAgentState.GENERATE_REPORT, DiagnosisAgentState.FAILED},
-    DiagnosisAgentState.GENERATE_REPORT: {DiagnosisAgentState.COMPLETED, DiagnosisAgentState.FAILED},
+    DiagnosisAgentState.GENERATE_REPORT: {
+        DiagnosisAgentState.REMEDIATION_PLAN,
+        DiagnosisAgentState.COMPLETED,
+        DiagnosisAgentState.FAILED,
+    },
+    DiagnosisAgentState.REMEDIATION_PLAN: {DiagnosisAgentState.COMPLETED, DiagnosisAgentState.FAILED},
     DiagnosisAgentState.COMPLETED: set(),
     DiagnosisAgentState.FAILED: set(),
 }
