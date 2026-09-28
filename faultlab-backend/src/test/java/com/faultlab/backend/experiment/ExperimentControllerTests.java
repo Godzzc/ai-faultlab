@@ -2,11 +2,16 @@ package com.faultlab.backend.experiment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.faultlab.backend.experiment.dto.ExperimentDetailResponse;
+import com.faultlab.backend.experiment.dto.MetricComparison;
 import com.faultlab.backend.experiment.dto.RemediationReplayRequest;
 import com.faultlab.backend.experiment.dto.RemediationReplayResponse;
+import com.faultlab.backend.experiment.dto.RemediationValidationReport;
+import com.faultlab.backend.experiment.dto.RemediationValidationStatus;
 import com.faultlab.backend.experiment.dto.StartExperimentRequest;
 import com.faultlab.backend.experiment.dto.StartExperimentResponse;
+import com.faultlab.backend.experiment.dto.TraceComparison;
 import com.faultlab.backend.experiment.remediation.RemediationReplayService;
+import com.faultlab.backend.experiment.remediation.RemediationValidationService;
 import com.faultlab.backend.experiment.remediation.RemediationReplayStatus;
 import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.experiment.service.ExperimentService;
@@ -47,6 +52,9 @@ class ExperimentControllerTests {
 
     @MockBean
     private RemediationReplayService remediationReplayService;
+
+    @MockBean
+    private RemediationValidationService remediationValidationService;
 
     @Test
     void shouldStartMqBacklogExperiment() throws Exception {
@@ -158,6 +166,41 @@ class ExperimentControllerTests {
                 .andExpect(jsonPath("$.data.appliedPatch.enableRetryLimit").value(true))
                 .andExpect(jsonPath("$.data.replayParams.failureRatio").value(0.7D))
                 .andExpect(jsonPath("$.data.status").value(RemediationReplayStatus.COMPLETED));
+    }
+
+    @Test
+    void shouldGetRemediationValidationWithApiResponse() throws Exception {
+        RemediationValidationReport report = new RemediationValidationReport();
+        report.setOriginalExperimentId("exp_original");
+        report.setReplayExperimentId("exp_replay");
+        report.setScenarioCode(ScenarioCode.RETRY_STORM);
+        report.setStatus(RemediationValidationStatus.VERIFIED);
+        report.setAppliedPatch(Map.of("enableRetryLimit", true));
+        report.setTotalExpectedEffects(1);
+        report.setMatchedEffects(1);
+        report.setUnmatchedEffects(0);
+        report.setInconclusiveEffects(0);
+        MetricComparison comparison = new MetricComparison();
+        comparison.setMetricName("downstream.retry.amplification.factor");
+        report.setMetricComparisons(List.of(comparison));
+        TraceComparison traceComparison = new TraceComparison();
+        traceComparison.setBeforeSpanCount(3);
+        traceComparison.setAfterSpanCount(2);
+        report.setTraceComparison(traceComparison);
+        report.setSummary("1 of 1 expected metric effects matched.");
+        when(remediationValidationService.validate("exp_replay")).thenReturn(report);
+
+        mockMvc.perform(get("/api/experiments/exp_replay/remediation-validation"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.originalExperimentId").value("exp_original"))
+                .andExpect(jsonPath("$.data.replayExperimentId").value("exp_replay"))
+                .andExpect(jsonPath("$.data.scenarioCode").value(ScenarioCode.RETRY_STORM))
+                .andExpect(jsonPath("$.data.status").value("VERIFIED"))
+                .andExpect(jsonPath("$.data.appliedPatch.enableRetryLimit").value(true))
+                .andExpect(jsonPath("$.data.metricComparisons[0].metricName").value("downstream.retry.amplification.factor"))
+                .andExpect(jsonPath("$.data.traceComparison.beforeSpanCount").value(3))
+                .andExpect(jsonPath("$.data.summary").value("1 of 1 expected metric effects matched."));
     }
 
     @Test
