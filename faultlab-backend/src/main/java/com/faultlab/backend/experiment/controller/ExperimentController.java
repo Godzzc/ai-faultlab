@@ -4,9 +4,11 @@ import com.faultlab.backend.common.ApiResponse;
 import com.faultlab.backend.experiment.dto.ExperimentDetailResponse;
 import com.faultlab.backend.experiment.dto.RemediationReplayRequest;
 import com.faultlab.backend.experiment.dto.RemediationReplayResponse;
+import com.faultlab.backend.experiment.dto.RemediationValidationReport;
 import com.faultlab.backend.experiment.dto.StartExperimentRequest;
 import com.faultlab.backend.experiment.dto.StartExperimentResponse;
 import com.faultlab.backend.experiment.remediation.RemediationReplayService;
+import com.faultlab.backend.experiment.remediation.RemediationValidationService;
 import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.experiment.service.ExperimentService;
 import com.faultlab.backend.metric.dto.MetricResponse;
@@ -25,15 +27,18 @@ public class ExperimentController {
     private final ExperimentService experimentService;
     private final ExperimentQueryService experimentQueryService;
     private final RemediationReplayService remediationReplayService;
+    private final RemediationValidationService remediationValidationService;
 
     public ExperimentController(
             ExperimentService experimentService,
             ExperimentQueryService experimentQueryService,
-            RemediationReplayService remediationReplayService
+            RemediationReplayService remediationReplayService,
+            RemediationValidationService remediationValidationService
     ) {
         this.experimentService = experimentService;
         this.experimentQueryService = experimentQueryService;
         this.remediationReplayService = remediationReplayService;
+        this.remediationValidationService = remediationValidationService;
     }
 
     @PostMapping("/start")
@@ -47,6 +52,11 @@ public class ExperimentController {
             @RequestBody RemediationReplayRequest request
     ) {
         return ApiResponse.success(remediationReplayService.replay(experimentId, request));
+    }
+
+    @GetMapping("/{experimentId}/remediation-validation")
+    public ApiResponse<RemediationValidationReport> validateRemediation(@PathVariable String experimentId) {
+        return ApiResponse.success(remediationValidationService.validate(experimentId));
     }
 
     @GetMapping("/{experimentId}")

@@ -14,7 +14,14 @@ public enum ErrorCode {
     INVALID_REMEDIATION_PATCH(4004, "invalid remediation patch"),
     REMEDIATION_PARAMETER_NOT_ALLOWED(4005, "remediation parameter not allowed"),
     SCENARIO_MISMATCH(4006, "scenario mismatch"),
-    REPLAY_EXECUTION_FAILED(4007, "replay execution failed");
+    REPLAY_EXECUTION_FAILED(4007, "replay execution failed"),
+    REMEDIATION_VALIDATION_REPLAY_NOT_FOUND(4101, "remediation validation replay experiment not found"),
+    REMEDIATION_VALIDATION_ORIGINAL_NOT_FOUND(4102, "remediation validation original experiment not found"),
+    REMEDIATION_VALIDATION_SOURCE_MISSING(4103, "remediation validation source experiment missing"),
+    REMEDIATION_VALIDATION_PARAMS_UNAVAILABLE(4104, "remediation validation params unavailable"),
+    REMEDIATION_VALIDATION_METRICS_UNAVAILABLE(4105, "remediation validation metrics unavailable"),
+    REMEDIATION_VALIDATION_UNSUPPORTED_SCENARIO(4106, "remediation validation unsupported scenario"),
+    COUNTERFACTUAL_INVARIANT_VIOLATION(4107, "counterfactual invariant violation");
 
     private final int code;
     private final String message;

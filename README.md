@@ -175,6 +175,8 @@ v0.15.0 Phase 1 adds deterministic remediation planning after diagnosis report g
 
 v0.15.0 Phase 2 adds Java Backend Counterfactual Remediation Replay. The backend clones the original experiment parameters, applies only a Java-side allowlisted remediation patch, and executes a new replay experiment with isolated Metrics and Trace. Details: [Counterfactual Remediation Replay](docs/counterfactual-remediation-replay.md)
 
+v0.15.0 Phase 3 adds Remediation Validation. AI FaultLab does not stop at generating remediation suggestions: it replays the candidate remediation under controlled fault conditions and validates its effect using Before / After Metrics and Trace evidence. Details: [Remediation Validation](docs/remediation-validation.md)
+
 ## RAG Evaluation
 
 `faultlab-ai-service` 包含 Runbook 检索评测能力。当前 evaluation cases 为 72 个，覆盖 12 个故障场景，并使用严格的 `docId + section` 命中判断。
@@ -225,6 +227,7 @@ ai-faultlab
 - [RAG Evaluation Guide](docs/rag-evaluation-guide.md)
 - [Remediation Planning](docs/remediation-planning.md)
 - [Counterfactual Remediation Replay](docs/counterfactual-remediation-replay.md)
+- [Remediation Validation](docs/remediation-validation.md)
 
 
 ## License
