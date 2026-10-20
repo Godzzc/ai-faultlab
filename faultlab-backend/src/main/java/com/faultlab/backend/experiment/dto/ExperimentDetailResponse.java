@@ -1,6 +1,7 @@
 package com.faultlab.backend.experiment.dto;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 public class ExperimentDetailResponse {
 
@@ -9,6 +10,7 @@ public class ExperimentDetailResponse {
     private String status;
     private String traceId;
     private String sourceExperimentId;
+    private Map<String, Object> params;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private LocalDateTime createdAt;
@@ -52,6 +54,14 @@ public class ExperimentDetailResponse {
 
     public void setSourceExperimentId(String sourceExperimentId) {
         this.sourceExperimentId = sourceExperimentId;
+    }
+
+    public Map<String, Object> getParams() {
+        return params;
+    }
+
+    public void setParams(Map<String, Object> params) {
+        this.params = params;
     }
 
     public LocalDateTime getStartTime() {

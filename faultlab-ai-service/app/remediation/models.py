@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from pydantic import Field
 
-from app.schemas import CamelModel
+from app.model_base import CamelModel
 
 
 class RemediationPlanStatus(StrEnum):

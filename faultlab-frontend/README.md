@@ -1,5 +1,14 @@
-# Vue 3 + Vite
+# AI FaultLab Frontend
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Vue 3 + Vite frontend for fault experiments, Metrics, Trace, diagnosis, Runbook evidence, Counterfactual Replay, and Remediation Validation.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+```bash
+npm install
+npm run dev
+npm test
+npm run build
+```
+
+The development server proxies `/api` to `http://localhost:8080` and `/ai` to `http://localhost:8000`.
+
+See [Remediation Workbench](../docs/remediation-workbench.md) for the end-to-end workflow and recovery behavior.

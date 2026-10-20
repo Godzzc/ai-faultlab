@@ -186,6 +186,32 @@ def test_generate_diagnosis_returns_fallback_when_llm_disabled(monkeypatch):
     assert response.json()["fallback"] is True
 
 
+def test_generate_diagnosis_exposes_structured_remediation_plan(monkeypatch):
+    disable_llm(monkeypatch)
+    rule_result = matched_rule_result(
+        evidence=["downstream.timeout.count=80", "api.error.count=80"],
+        fault_type="DOWNSTREAM_TIMEOUT",
+    )
+    response = client.post(
+        "/ai/diagnosis/generate",
+        json=build_request(
+            scenario_code="DOWNSTREAM_TIMEOUT",
+            rule_result=rule_result,
+            metrics=[
+                {"metricName": "downstream.timeout.count", "metricValue": "80", "metricUnit": "count", "component": "HTTP"},
+                {"metricName": "api.error.count", "metricValue": "80", "metricUnit": "count", "component": "API"},
+            ],
+        ),
+    )
+
+    assert response.status_code == 200
+    plan = response.json()["remediationPlan"]
+    assert plan["status"] == "PROPOSED"
+    assert plan["scenarioCode"] == "DOWNSTREAM_TIMEOUT"
+    assert plan["actions"][0]["parameterPatch"] == {"enableFallback": True}
+    assert plan["expectedEffects"][0]["metricName"] == "api.error.count"
+
+
 def test_generate_diagnosis_does_not_call_llm_when_api_key_empty(monkeypatch):
     clear_api_key(monkeypatch)
     fake_client = FakeLlmClient(outputs=[json.dumps(llm_response())])

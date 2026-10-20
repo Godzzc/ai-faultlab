@@ -7,6 +7,7 @@ import com.faultlab.backend.common.ErrorCode;
 import com.faultlab.backend.diagnosis.ai.dto.AiDiagnosisRequest;
 import com.faultlab.backend.diagnosis.ai.dto.AiDiagnosisResponse;
 import com.faultlab.backend.diagnosis.ai.dto.ExperimentInfo;
+import com.faultlab.backend.diagnosis.ai.dto.RemediationPlan;
 import com.faultlab.backend.diagnosis.entity.DiagnosisReport;
 import com.faultlab.backend.diagnosis.mapper.DiagnosisReportMapper;
 import com.faultlab.backend.rule.dto.RuleDiagnosisResult;
@@ -66,6 +67,8 @@ class AiDiagnosisServiceTests {
         verify(diagnosisReportMapper).updateById(captor.capture());
         assertThat(captor.getValue().getId()).isEqualTo(1L);
         assertThat(captor.getValue().getAiReportJson()).contains("\"fallback\":false");
+        assertThat(captor.getValue().getAiReportJson()).contains("\"remediationPlan\":{");
+        assertThat(captor.getValue().getAiReportJson()).contains("\"status\":\"UNSUPPORTED\"");
     }
 
     @Test
@@ -163,7 +166,18 @@ class AiDiagnosisServiceTests {
                 List.of(),
                 List.of("增加消费者并发"),
                 List.of(),
-                fallback
+                fallback,
+                new RemediationPlan(
+                        "plan-1",
+                        "exp-1",
+                        ScenarioCode.MQ_BACKLOG,
+                        List.of(),
+                        List.of(),
+                        List.of("publishCount=10"),
+                        0.0,
+                        "UNSUPPORTED",
+                        List.of("remediation planning unsupported for scenario MQ_BACKLOG")
+                )
         );
     }
 

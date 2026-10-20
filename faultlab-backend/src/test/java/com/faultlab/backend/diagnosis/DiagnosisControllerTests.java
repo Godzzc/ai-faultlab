@@ -3,11 +3,15 @@ package com.faultlab.backend.diagnosis;
 import com.faultlab.backend.diagnosis.dto.DiagnosisReportResponse;
 import com.faultlab.backend.diagnosis.ai.AiDiagnosisService;
 import com.faultlab.backend.diagnosis.ai.dto.AiDiagnosisResponse;
+import com.faultlab.backend.diagnosis.ai.dto.RemediationAction;
+import com.faultlab.backend.diagnosis.ai.dto.RemediationExpectedMetricEffect;
+import com.faultlab.backend.diagnosis.ai.dto.RemediationPlan;
 import com.faultlab.backend.experiment.service.ExperimentQueryService;
 import com.faultlab.backend.rule.dto.RuleDiagnosisResult;
 import com.faultlab.backend.rule.service.RuleDiagnosisService;
 import com.faultlab.backend.scenario.model.ScenarioCode;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -122,6 +126,26 @@ class DiagnosisControllerTests {
 
     @Test
     void controllerShouldGenerateAiDiagnosis() throws Exception {
+        RemediationPlan remediationPlan = new RemediationPlan(
+                "plan-1",
+                "exp-1",
+                ScenarioCode.DOWNSTREAM_TIMEOUT,
+                List.of(new RemediationAction(
+                        "ENABLE_FALLBACK",
+                        "Enable fallback.",
+                        Map.of("enableFallback", true),
+                        "Reduce surfaced API errors."
+                )),
+                List.of(new RemediationExpectedMetricEffect(
+                        "api.error.count",
+                        "DECREASE",
+                        "Errors should fall."
+                )),
+                List.of("downstream.timeout.count=80"),
+                0.8,
+                "PROPOSED",
+                List.of()
+        );
         AiDiagnosisResponse response = new AiDiagnosisResponse(
                 "exp-1",
                 ScenarioCode.MQ_BACKLOG,
@@ -133,7 +157,8 @@ class DiagnosisControllerTests {
                 List.of(),
                 List.of("增加消费者并发"),
                 List.of(),
-                false
+                false,
+                remediationPlan
         );
         when(aiDiagnosisService.generateAiDiagnosis("exp-1")).thenReturn(response);
 
@@ -143,6 +168,8 @@ class DiagnosisControllerTests {
                 .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data.experimentId").value("exp-1"))
                 .andExpect(jsonPath("$.data.faultType").value(ScenarioCode.MQ_BACKLOG))
-                .andExpect(jsonPath("$.data.fallback").value(false));
+                .andExpect(jsonPath("$.data.fallback").value(false))
+                .andExpect(jsonPath("$.data.remediationPlan.status").value("PROPOSED"))
+                .andExpect(jsonPath("$.data.remediationPlan.actions[0].parameterPatch.enableFallback").value(true));
     }
 }

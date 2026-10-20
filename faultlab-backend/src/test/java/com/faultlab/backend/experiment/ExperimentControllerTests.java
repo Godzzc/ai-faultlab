@@ -120,6 +120,8 @@ class ExperimentControllerTests {
         response.setScenarioCode(ScenarioCode.MQ_BACKLOG);
         response.setStatus(ExperimentStatus.RUNNING);
         response.setTraceId("trace-1");
+        response.setSourceExperimentId(null);
+        response.setParams(Map.of("messageCount", 10, "consumerDelayMs", 1000));
         response.setStartTime(LocalDateTime.of(2026, 7, 28, 10, 0));
         when(experimentQueryService.getExperimentDetail("exp-1")).thenReturn(response);
 
@@ -129,7 +131,9 @@ class ExperimentControllerTests {
                 .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data.experimentId").value("exp-1"))
                 .andExpect(jsonPath("$.data.scenarioCode").value(ScenarioCode.MQ_BACKLOG))
-                .andExpect(jsonPath("$.data.traceId").value("trace-1"));
+                .andExpect(jsonPath("$.data.traceId").value("trace-1"))
+                .andExpect(jsonPath("$.data.params.messageCount").value(10))
+                .andExpect(jsonPath("$.data.params.consumerDelayMs").value(1000));
     }
 
     @Test

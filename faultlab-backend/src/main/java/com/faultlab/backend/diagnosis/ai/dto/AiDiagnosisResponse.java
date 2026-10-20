@@ -13,6 +13,7 @@ public record AiDiagnosisResponse(
         List<String> rootCauses,
         List<String> suggestions,
         List<RunbookReference> runbookReferences,
-        Boolean fallback
+        Boolean fallback,
+        RemediationPlan remediationPlan
 ) {
 }

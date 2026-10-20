@@ -1,6 +1,7 @@
 package com.faultlab.backend.experiment;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.faultlab.backend.common.BusinessException;
 import com.faultlab.backend.diagnosis.dto.DiagnosisReportResponse;
 import com.faultlab.backend.diagnosis.entity.DiagnosisReport;
@@ -33,7 +34,8 @@ class ExperimentQueryServiceTests {
     private final ExperimentQueryService queryService = new ExperimentQueryService(
             faultExperimentMapper,
             faultMetricMapper,
-            diagnosisReportMapper
+            diagnosisReportMapper,
+            new ObjectMapper()
     );
 
     @Test
@@ -47,6 +49,7 @@ class ExperimentQueryServiceTests {
         assertThat(response.getScenarioCode()).isEqualTo(ScenarioCode.MQ_BACKLOG);
         assertThat(response.getStatus()).isEqualTo(ExperimentStatus.RUNNING);
         assertThat(response.getTraceId()).isEqualTo("trace-1");
+        assertThat(response.getParams()).containsEntry("messageCount", 10);
         assertThat(response.getStartTime()).isEqualTo(experiment.getStartTime());
     }
 
@@ -114,6 +117,7 @@ class ExperimentQueryServiceTests {
         experiment.setScenarioCode(ScenarioCode.MQ_BACKLOG);
         experiment.setStatus(ExperimentStatus.RUNNING);
         experiment.setTraceId("trace-1");
+        experiment.setParamsJson("{\"messageCount\":10,\"consumerDelayMs\":1000}");
         experiment.setStartTime(now.minusSeconds(10));
         experiment.setCreatedAt(now.minusSeconds(10));
         experiment.setUpdatedAt(now);

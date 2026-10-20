@@ -23,6 +23,7 @@ AI FaultLab 用于模拟典型 Java 后端故障，并通过 Metrics、Trace、�
 - Remediation Planning：将诊断建议转换为结构化 `RemediationPlan` 提案，首版只生成和校验修复参数，不执行修复。
 - Retrieval Evaluation：用评测集度量 Runbook 检索质量，支持 Hit@K、Recall@K 和 MRR。
 - Frontend Demo Console：Vue 前端提供场景选择、参数配置、实验结果、Metrics、Trace、Rule Diagnosis、AI Report 和 RAG Console 展示。
+- Remediation Workbench：读取正式诊断响应中的结构化 `RemediationPlan`，调用 Java Replay Policy 创建反事实实验，并展示后端确定性 Validation Report、Metrics 与 Trace 对比。
 
 ## 场景覆盖
 
@@ -177,6 +178,8 @@ v0.15.0 Phase 2 adds Java Backend Counterfactual Remediation Replay. The backend
 
 v0.15.0 Phase 3 adds Remediation Validation. AI FaultLab does not stop at generating remediation suggestions: it replays the candidate remediation under controlled fault conditions and validates its effect using Before / After Metrics and Trace evidence. Details: [Remediation Validation](docs/remediation-validation.md)
 
+v0.16.0 Phase 1 adds the frontend Remediation Workbench and refresh recovery for the persisted original/replay relationship. Details: [Remediation Workbench](docs/remediation-workbench.md)
+
 ## RAG Evaluation
 
 `faultlab-ai-service` 包含 Runbook 检索评测能力。当前 evaluation cases 为 72 个，覆盖 12 个故障场景，并使用严格的 `docId + section` 命中判断。
@@ -228,6 +231,7 @@ ai-faultlab
 - [Remediation Planning](docs/remediation-planning.md)
 - [Counterfactual Remediation Replay](docs/counterfactual-remediation-replay.md)
 - [Remediation Validation](docs/remediation-validation.md)
+- [Remediation Workbench](docs/remediation-workbench.md)
 
 
 ## License
