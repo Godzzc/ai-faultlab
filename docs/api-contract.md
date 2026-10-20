@@ -1,5 +1,50 @@
 # API Contract
 
+## Remediation Workbench contract additions
+
+`GET /api/experiments/{experimentId}` now also returns the persisted experiment relationship and parameters:
+
+```json
+{
+  "sourceExperimentId": null,
+  "params": {
+    "requestCount": 100,
+    "enableFallback": false
+  }
+}
+```
+
+`params` is parsed from the existing `fault_experiment.params_json`. It is `null` for legacy experiments whose parameters were not persisted. Replay experiments continue to expose their original relationship through `sourceExperimentId`.
+
+The formal `POST /ai/diagnosis/generate` response, and therefore the Java `POST /api/diagnosis/{experimentId}/ai/generate` response and persisted `aiReportJson`, now includes an optional `remediationPlan`:
+
+```json
+{
+  "remediationPlan": {
+    "planId": "plan_xxx",
+    "experimentId": "exp_original",
+    "scenarioCode": "DOWNSTREAM_TIMEOUT",
+    "status": "PROPOSED",
+    "actions": [{
+      "actionType": "ENABLE_FALLBACK",
+      "description": "Enable fallback for downstream timeout responses.",
+      "parameterPatch": { "enableFallback": true },
+      "rationale": "The controlled scenario converts timeout-driven API errors to fallback responses."
+    }],
+    "expectedEffects": [{
+      "metricName": "api.error.count",
+      "direction": "DECREASE",
+      "description": "Timeouts should no longer surface as API errors."
+    }],
+    "evidence": [],
+    "confidence": 0.72,
+    "warnings": []
+  }
+}
+```
+
+The field is optional for backward compatibility and is `null` when Java creates a rule-based fallback after the AI service is unavailable. The stable business response is the diagnosis response; `/ai/diagnosis/agent-runs/{requestId}` remains a debug endpoint and is not used by the Workbench.
+
 ## Start Experiment
 
 ```text

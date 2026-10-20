@@ -74,7 +74,8 @@ public class AiDiagnosisService {
                     List.of(),
                     ruleResult.getSuggestions() == null ? List.of() : ruleResult.getSuggestions(),
                     List.of(),
-                    true
+                    true,
+                    null
             );
         }
 
@@ -89,7 +90,8 @@ public class AiDiagnosisService {
                 List.of(),
                 List.of(),
                 List.of(),
-                true
+                true,
+                null
         );
     }
 

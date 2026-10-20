@@ -1,5 +1,7 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { requestJson } from './api.js'
+import RemediationWorkbench from './components/RemediationWorkbench.vue'
 import TraceNode from './components/TraceNode.vue'
 
 const scenarios = [
@@ -417,6 +419,7 @@ const ruleDiagnosis = ref(null)
 const aiDiagnosis = ref(null)
 const traceTree = ref(null)
 const currentExperimentId = ref('')
+const initialReplayExperimentId = ref('')
 const loading = reactive({
   start: false,
   refresh: false,
@@ -600,24 +603,6 @@ function selectScenario(code) {
   Object.assign(params, selectedScenario.value.defaults)
 }
 
-async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
-    ...options,
-  })
-  const payload = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new Error(payload?.message || `请求失败：${response.status}`)
-  }
-  if (payload && typeof payload.code === 'number' && payload.code !== 0) {
-    throw new Error(payload.message || '请求失败')
-  }
-  return payload?.data ?? payload ?? null
-}
-
 async function runRagEvaluation() {
   evaluationLoading.value = true
   evaluationError.value = ''
@@ -680,6 +665,8 @@ async function startExperiment() {
     })
     experiment.value = data
     currentExperimentId.value = data?.experimentId || ''
+    initialReplayExperimentId.value = ''
+    persistExperimentLocation(currentExperimentId.value)
     ruleDiagnosis.value = null
     aiDiagnosis.value = null
     aiError.value = ''
@@ -693,6 +680,37 @@ async function startExperiment() {
     loading.start = false
   }
 }
+
+function persistExperimentLocation(experimentId) {
+  if (!experimentId || typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  url.searchParams.set('experimentId', experimentId)
+  url.searchParams.delete('replayExperimentId')
+  window.history.replaceState({}, '', url)
+}
+
+async function restoreWorkbenchLocation() {
+  if (typeof window === 'undefined') return
+  const query = new URLSearchParams(window.location.search)
+  const replayExperimentId = query.get('replayExperimentId') || ''
+  let originalExperimentId = query.get('experimentId') || ''
+  initialReplayExperimentId.value = replayExperimentId
+  if (!originalExperimentId && replayExperimentId) {
+    try {
+      const replayDetail = await requestJson(`/api/experiments/${encodeURIComponent(replayExperimentId)}`)
+      originalExperimentId = replayDetail?.sourceExperimentId || ''
+    } catch (error) {
+      errorMessage.value = error?.message || 'Replay 实验恢复失败'
+      return
+    }
+  }
+  if (originalExperimentId) {
+    currentExperimentId.value = originalExperimentId
+    await refreshExperimentData()
+  }
+}
+
+onMounted(restoreWorkbenchLocation)
 
 async function refreshExperimentData() {
   if (!currentExperimentId.value) {
@@ -1301,6 +1319,12 @@ function formatMetadata(metadata) {
             </div>
           </div>
           <p v-else-if="!aiError" class="empty">暂无 AI 诊断报告</p>
+          <RemediationWorkbench
+            :experiment="experiment"
+            :diagnosis="aiDiagnosis"
+            :metrics="metrics"
+            :initial-replay-experiment-id="initialReplayExperimentId"
+          />
         </section>
 
         <section class="panel">

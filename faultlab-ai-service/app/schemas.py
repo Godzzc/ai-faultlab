@@ -1,18 +1,10 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
+from app.model_base import CamelModel
+from app.remediation.models import RemediationPlan
 
-def to_camel(value: str) -> str:
-    parts = value.split("_")
-    return parts[0] + "".join(part.capitalize() for part in parts[1:])
-
-
-class CamelModel(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
 
 
 class ExperimentInfo(CamelModel):
@@ -85,3 +77,4 @@ class DiagnosisResponse(CamelModel):
     suggestions: list[str] = Field(default_factory=list)
     runbook_references: list[RunbookReference] = Field(default_factory=list)
     fallback: bool = False
+    remediation_plan: RemediationPlan | None = None

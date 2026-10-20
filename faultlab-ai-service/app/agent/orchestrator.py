@@ -208,6 +208,8 @@ class DiagnosisAgentOrchestrator:
             fail_fast=False,
         )
         context.remediation_plan = result.data.get("remediationPlan")
+        if context.report and context.remediation_plan:
+            context.report.remediation_plan = context.remediation_plan
         if result.warnings:
             context.warnings.extend(result.warnings)
         if not result.success:

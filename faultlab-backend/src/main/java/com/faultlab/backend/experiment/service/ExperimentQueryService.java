@@ -1,6 +1,9 @@
 package com.faultlab.backend.experiment.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.faultlab.backend.common.BusinessException;
 import com.faultlab.backend.common.ErrorCode;
 import com.faultlab.backend.diagnosis.dto.DiagnosisReportResponse;
@@ -14,7 +17,9 @@ import com.faultlab.backend.metric.entity.FaultMetric;
 import com.faultlab.backend.metric.mapper.FaultMetricMapper;
 import com.faultlab.backend.trace.annotation.TraceSpan;
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -24,15 +29,18 @@ public class ExperimentQueryService {
     private final FaultExperimentMapper faultExperimentMapper;
     private final FaultMetricMapper faultMetricMapper;
     private final DiagnosisReportMapper diagnosisReportMapper;
+    private final ObjectMapper objectMapper;
 
     public ExperimentQueryService(
             FaultExperimentMapper faultExperimentMapper,
             FaultMetricMapper faultMetricMapper,
-            DiagnosisReportMapper diagnosisReportMapper
+            DiagnosisReportMapper diagnosisReportMapper,
+            ObjectMapper objectMapper
     ) {
         this.faultExperimentMapper = faultExperimentMapper;
         this.faultMetricMapper = faultMetricMapper;
         this.diagnosisReportMapper = diagnosisReportMapper;
+        this.objectMapper = objectMapper;
     }
 
     @TraceSpan(operationName = "experiment.query.detail", component = "MySQL")
@@ -83,11 +91,29 @@ public class ExperimentQueryService {
         response.setStatus(experiment.getStatus());
         response.setTraceId(experiment.getTraceId());
         response.setSourceExperimentId(experiment.getSourceExperimentId());
+        response.setParams(readParams(experiment));
         response.setStartTime(experiment.getStartTime());
         response.setEndTime(experiment.getEndTime());
         response.setCreatedAt(experiment.getCreatedAt());
         response.setUpdatedAt(experiment.getUpdatedAt());
         return response;
+    }
+
+    private Map<String, Object> readParams(FaultExperiment experiment) {
+        if (!StringUtils.hasText(experiment.getParamsJson())) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(
+                    experiment.getParamsJson(),
+                    new TypeReference<LinkedHashMap<String, Object>>() { }
+            );
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(
+                    ErrorCode.ORIGINAL_EXPERIMENT_PARAMS_UNAVAILABLE,
+                    "failed to parse experiment params: " + experiment.getExperimentId()
+            );
+        }
     }
 
     private MetricResponse toMetricResponse(FaultMetric metric) {
